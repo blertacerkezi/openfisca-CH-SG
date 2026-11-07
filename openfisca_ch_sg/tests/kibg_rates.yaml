@@ -1,7 +1,7 @@
 - name: Kita - Kind unter 18 Monaten
   period: 2026-11
   input:
-    kind_alter_monate: 12
+    alter_in_monaten: 12
     betreuungsart: kita
   output:
     maximaler_stundenbeitrag: 11.0
@@ -9,7 +9,7 @@
 - name: Kita - Kind ab 18 Monaten
   period: 2026-11
   input:
-    kind_alter_monate: 24
+    alter_in_monaten: 24
     betreuungsart: kita
   output:
     maximaler_stundenbeitrag: 7.5
@@ -17,7 +17,7 @@
 - name: Tagesfamilie - Kind unter 18 Monaten
   period: 2026-11
   input:
-    kind_alter_monate: 12
+    alter_in_monaten: 12
     betreuungsart: tagesfamilie
   output:
     maximaler_stundenbeitrag: 8.3
@@ -25,8 +25,45 @@
 - name: Schulergänzende Betreuung
   period: 2026-11
   input:
-    kind_alter_monate: 84
+    alter_in_monaten: 84
     kind_eingeschult: true
     betreuungsart: schulergaenzend
   output:
     maximaler_stundenbeitrag: 5.5
+
+
+- name: Tagesfamilie - ab 18 Monaten
+  period: 2026-11
+  input:
+    alter_in_monaten: 18
+    kind_eingeschult: false
+    betreuungsart: tagesfamilie
+  output:
+    maximaler_stundenbeitrag: 5.5
+
+- name: Kita - eingeschult
+  period: 2026-11
+  input:
+    alter_in_monaten: 84
+    kind_eingeschult: true
+    betreuungsart: kita
+  output:
+    maximaler_stundenbeitrag: 7.5
+
+- name: Tagesfamilie - eingeschult
+  period: 2026-11
+  input:
+    alter_in_monaten: 84
+    kind_eingeschult: true
+    betreuungsart: tagesfamilie
+  output:
+    maximaler_stundenbeitrag: 5.5
+
+- name: Kita - genau 18 Monate
+  period: 2026-11
+  input:
+    alter_in_monaten: 18
+    kind_eingeschult: false
+    betreuungsart: kita
+  output:
+    maximaler_stundenbeitrag: 7.5
