@@ -1,0 +1,7 @@
+description: Income threshold for childcare subsidy eligibility
+values:
+  2026-01-01:
+    value: 154000
+metadata:
+  unit: currency-CHF
+  reference: KiBV Art. 15

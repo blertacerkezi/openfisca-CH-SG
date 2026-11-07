@@ -1,0 +1,6 @@
+description: Maximum hourly subsidy for family care from 18 months
+values:
+  2026-11-01:
+    value: 5.5
+metadata:
+  unit: currency-CHF

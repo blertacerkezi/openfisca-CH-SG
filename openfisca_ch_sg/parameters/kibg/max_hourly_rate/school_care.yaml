@@ -1,0 +1,6 @@
+description: Maximum hourly subsidy for school-based childcare
+values:
+  2026-11-01:
+    value: 5.5
+metadata:
+  unit: currency-CHF

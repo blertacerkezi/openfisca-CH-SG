@@ -1,0 +1,26 @@
+- name: Maximaler Grundbeitrag
+  period: 2026-11
+  input:
+    massgebendes_einkommen: 40000
+    kind_alter_monate: 12
+    betreuungsart: kita
+  output:
+    grundbeitrag_pro_stunde: 11.0
+
+- name: Reduzierter Grundbeitrag
+  period: 2026-11
+  input:
+    massgebendes_einkommen: 70000
+    kind_alter_monate: 12
+    betreuungsart: kita
+  output:
+    grundbeitrag_pro_stunde: 8.105263
+
+- name: Kein Grundbeitrag oberhalb der Einkommensgrenze
+  period: 2026-11
+  input:
+    massgebendes_einkommen: 160000
+    kind_alter_monate: 12
+    betreuungsart: kita
+  output:
+    grundbeitrag_pro_stunde: 0
