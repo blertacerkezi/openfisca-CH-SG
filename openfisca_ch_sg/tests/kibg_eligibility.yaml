@@ -1,0 +1,665 @@
+# Anspruchsprüfung KiBG — TDD-Vertrag für CS1.
+# Ablage im Repo: openfisca_ch_sg/tests/kibg_eligibility.yaml
+#
+# Output, den CS2 konsumiert:
+#   kibg_anspruchsberechtigt (Person, MONTH, bool)
+#   true nur für das betreute Kind. Eltern und Partner sind false.
+#   Einkommen, Vermögen und Beitragshöhe sind hier absichtlich nicht geprüft.
+#
+# Inputs (alle Person, MONTH). Nicht gesetzte Bools = false, Pensum = 0.
+#   wohnsitz_im_kanton                     bool   Art. 4 Abs. 1 KiBG
+#   erziehungsberechtigt                   bool   nur diese Erwachsenen zählen
+#   beschaeftigungsgrad                    float  Prozent; 20 bedeutet 20 Prozent
+#   berufliche_integration                 bool   Art. 12 Bst. a KiBV
+#   familiaere_belastung                   bool   Art. 12 Bst. b KiBV
+#   alter_in_monaten                       int    Art. 4 Abs. 3 KiBG
+#   primarschule_abgeschlossen             bool   Art. 4 Abs. 3 KiBG
+#   faktische_obhut                        bool   Art. 7 KiBV
+#   betreuung_in_anspruch                  bool   Art. 7 KiBV
+#   betreuung_in_anerkannter_einrichtung   bool   Art. 3 Abs. 1 KiBG
+#   kindliche_indikation                   bool   Art. 12 Bst. c KiBV
+#
+# Annahmen, bis die Law-Leute Entity und Period festlegen:
+# - Bestehendes Household, Rollen adults / children. Keine neue Entity.
+# - Period MONTH, Tests auf 2026-08 (Gesetz vom 14. Juni 2026).
+# - Eine erziehungsberechtigte Person im Haushalt: Pensum wenigstens 20.
+# - Zwei oder mehr: Summe wenigstens 120. 120 + 0 erfüllt den Wortlaut.
+# - Partner ohne erziehungsberechtigt zählt weder für die 120 noch fürs Wohnsitz-Erfordernis.
+# - Ausnahme (eine der drei KiBV-Tatsachen) hebt nur das Pensum auf, nichts anderes.
+# - Jede erziehungsberechtigte Person im Haushalt braucht wohnsitz_im_kanton.
+# - alter_in_monaten >= 3 und primarschule_abgeschlossen = false.
+#   Kein numerisches Höchstalter: massgebend ist der Primarschulabschluss.
+
+- name: Alleinerziehend mit 20 Prozent und Kind ab 3 Monaten ist anspruchsberechtigt
+  period: 2026-08
+  input:
+    persons:
+      elternteil:
+        wohnsitz_im_kanton: true
+        erziehungsberechtigt: true
+        beschaeftigungsgrad: 20
+      kind:
+        alter_in_monaten: 3
+        faktische_obhut: true
+        betreuung_in_anspruch: true
+        betreuung_in_anerkannter_einrichtung: true
+    households:
+      haushalt:
+        adults: [elternteil]
+        children: [kind]
+  output:
+    persons:
+      elternteil:
+        kibg_anspruchsberechtigt: false
+      kind:
+        kibg_anspruchsberechtigt: true
+
+- name: Pensum 19 Prozent reicht allein nicht
+  period: 2026-08
+  input:
+    persons:
+      elternteil:
+        wohnsitz_im_kanton: true
+        erziehungsberechtigt: true
+        beschaeftigungsgrad: 19
+      kind:
+        alter_in_monaten: 24
+        faktische_obhut: true
+        betreuung_in_anspruch: true
+        betreuung_in_anerkannter_einrichtung: true
+    households:
+      haushalt:
+        adults: [elternteil]
+        children: [kind]
+  output:
+    persons:
+      kind:
+        kibg_anspruchsberechtigt: false
+
+- name: Kind unter 3 Monaten ist nicht anspruchsberechtigt
+  period: 2026-08
+  input:
+    persons:
+      elternteil:
+        wohnsitz_im_kanton: true
+        erziehungsberechtigt: true
+        beschaeftigungsgrad: 100
+      kind:
+        alter_in_monaten: 2
+        faktische_obhut: true
+        betreuung_in_anspruch: true
+        betreuung_in_anerkannter_einrichtung: true
+    households:
+      haushalt:
+        adults: [elternteil]
+        children: [kind]
+  output:
+    persons:
+      kind:
+        kibg_anspruchsberechtigt: false
+
+- name: Kind in der Primarschule bleibt anspruchsberechtigt
+  period: 2026-08
+  input:
+    persons:
+      elternteil:
+        wohnsitz_im_kanton: true
+        erziehungsberechtigt: true
+        beschaeftigungsgrad: 40
+      kind:
+        alter_in_monaten: 96
+        primarschule_abgeschlossen: false
+        faktische_obhut: true
+        betreuung_in_anspruch: true
+        betreuung_in_anerkannter_einrichtung: true
+    households:
+      haushalt:
+        adults: [elternteil]
+        children: [kind]
+  output:
+    persons:
+      kind:
+        kibg_anspruchsberechtigt: true
+
+- name: Nach Abschluss der Primarschule endet der Anspruch
+  period: 2026-08
+  input:
+    persons:
+      elternteil:
+        wohnsitz_im_kanton: true
+        erziehungsberechtigt: true
+        beschaeftigungsgrad: 80
+      kind:
+        alter_in_monaten: 144
+        primarschule_abgeschlossen: true
+        faktische_obhut: true
+        betreuung_in_anspruch: true
+        betreuung_in_anerkannter_einrichtung: true
+    households:
+      haushalt:
+        adults: [elternteil]
+        children: [kind]
+  output:
+    persons:
+      kind:
+        kibg_anspruchsberechtigt: false
+
+- name: Kein numerisches Hoechstalter vor dem Primarschulabschluss
+  period: 2026-08
+  input:
+    persons:
+      elternteil:
+        wohnsitz_im_kanton: true
+        erziehungsberechtigt: true
+        beschaeftigungsgrad: 50
+      kind:
+        alter_in_monaten: 168
+        primarschule_abgeschlossen: false
+        faktische_obhut: true
+        betreuung_in_anspruch: true
+        betreuung_in_anerkannter_einrichtung: true
+    households:
+      haushalt:
+        adults: [elternteil]
+        children: [kind]
+  output:
+    persons:
+      kind:
+        kibg_anspruchsberechtigt: true
+
+- name: Ohne Wohnsitz im Kanton kein Anspruch
+  period: 2026-08
+  input:
+    persons:
+      elternteil:
+        wohnsitz_im_kanton: false
+        erziehungsberechtigt: true
+        beschaeftigungsgrad: 80
+      kind:
+        alter_in_monaten: 24
+        faktische_obhut: true
+        betreuung_in_anspruch: true
+        betreuung_in_anerkannter_einrichtung: true
+    households:
+      haushalt:
+        adults: [elternteil]
+        children: [kind]
+  output:
+    persons:
+      kind:
+        kibg_anspruchsberechtigt: false
+
+- name: Ohne faktische Obhut kein Anspruch
+  period: 2026-08
+  input:
+    persons:
+      elternteil:
+        wohnsitz_im_kanton: true
+        erziehungsberechtigt: true
+        beschaeftigungsgrad: 80
+      kind:
+        alter_in_monaten: 24
+        faktische_obhut: false
+        betreuung_in_anspruch: true
+        betreuung_in_anerkannter_einrichtung: true
+    households:
+      haushalt:
+        adults: [elternteil]
+        children: [kind]
+  output:
+    persons:
+      kind:
+        kibg_anspruchsberechtigt: false
+
+- name: Ohne Inanspruchnahme der Betreuung kein Anspruch
+  period: 2026-08
+  input:
+    persons:
+      elternteil:
+        wohnsitz_im_kanton: true
+        erziehungsberechtigt: true
+        beschaeftigungsgrad: 80
+      kind:
+        alter_in_monaten: 24
+        faktische_obhut: true
+        betreuung_in_anspruch: false
+        betreuung_in_anerkannter_einrichtung: true
+    households:
+      haushalt:
+        adults: [elternteil]
+        children: [kind]
+  output:
+    persons:
+      kind:
+        kibg_anspruchsberechtigt: false
+
+- name: Ohne anerkannte angemeldete Einrichtung kein Anspruch
+  period: 2026-08
+  input:
+    persons:
+      elternteil:
+        wohnsitz_im_kanton: true
+        erziehungsberechtigt: true
+        beschaeftigungsgrad: 80
+      kind:
+        alter_in_monaten: 24
+        faktische_obhut: true
+        betreuung_in_anspruch: true
+        betreuung_in_anerkannter_einrichtung: false
+    households:
+      haushalt:
+        adults: [elternteil]
+        children: [kind]
+  output:
+    persons:
+      kind:
+        kibg_anspruchsberechtigt: false
+
+- name: Ohne Erziehungsberechtigung im Haushalt kein Anspruch
+  period: 2026-08
+  input:
+    persons:
+      erwachsene:
+        wohnsitz_im_kanton: true
+        erziehungsberechtigt: false
+        beschaeftigungsgrad: 100
+      kind:
+        alter_in_monaten: 24
+        faktische_obhut: true
+        betreuung_in_anspruch: true
+        betreuung_in_anerkannter_einrichtung: true
+    households:
+      haushalt:
+        adults: [erwachsene]
+        children: [kind]
+  output:
+    persons:
+      kind:
+        kibg_anspruchsberechtigt: false
+
+- name: Berufliche Integration hebt das Pensum auf
+  period: 2026-08
+  input:
+    persons:
+      elternteil:
+        wohnsitz_im_kanton: true
+        erziehungsberechtigt: true
+        beschaeftigungsgrad: 0
+        berufliche_integration: true
+      kind:
+        alter_in_monaten: 12
+        faktische_obhut: true
+        betreuung_in_anspruch: true
+        betreuung_in_anerkannter_einrichtung: true
+    households:
+      haushalt:
+        adults: [elternteil]
+        children: [kind]
+  output:
+    persons:
+      kind:
+        kibg_anspruchsberechtigt: true
+
+- name: Familiaere Belastung hebt das Pensum auf
+  period: 2026-08
+  input:
+    persons:
+      elternteil:
+        wohnsitz_im_kanton: true
+        erziehungsberechtigt: true
+        beschaeftigungsgrad: 0
+        familiaere_belastung: true
+      kind:
+        alter_in_monaten: 12
+        faktische_obhut: true
+        betreuung_in_anspruch: true
+        betreuung_in_anerkannter_einrichtung: true
+    households:
+      haushalt:
+        adults: [elternteil]
+        children: [kind]
+  output:
+    persons:
+      kind:
+        kibg_anspruchsberechtigt: true
+
+- name: Kindliche Indikation hebt das Pensum auf
+  period: 2026-08
+  input:
+    persons:
+      elternteil:
+        wohnsitz_im_kanton: true
+        erziehungsberechtigt: true
+        beschaeftigungsgrad: 0
+      kind:
+        alter_in_monaten: 12
+        kindliche_indikation: true
+        faktische_obhut: true
+        betreuung_in_anspruch: true
+        betreuung_in_anerkannter_einrichtung: true
+    households:
+      haushalt:
+        adults: [elternteil]
+        children: [kind]
+  output:
+    persons:
+      kind:
+        kibg_anspruchsberechtigt: true
+
+- name: Ausnahme hebt fehlenden Wohnsitz nicht auf
+  period: 2026-08
+  input:
+    persons:
+      elternteil:
+        wohnsitz_im_kanton: false
+        erziehungsberechtigt: true
+        beschaeftigungsgrad: 0
+        berufliche_integration: true
+      kind:
+        alter_in_monaten: 12
+        faktische_obhut: true
+        betreuung_in_anspruch: true
+        betreuung_in_anerkannter_einrichtung: true
+    households:
+      haushalt:
+        adults: [elternteil]
+        children: [kind]
+  output:
+    persons:
+      kind:
+        kibg_anspruchsberechtigt: false
+
+- name: Ausnahme hebt die Altersgrenze nicht auf
+  period: 2026-08
+  input:
+    persons:
+      elternteil:
+        wohnsitz_im_kanton: true
+        erziehungsberechtigt: true
+        beschaeftigungsgrad: 0
+        berufliche_integration: true
+      kind:
+        alter_in_monaten: 2
+        faktische_obhut: true
+        betreuung_in_anspruch: true
+        betreuung_in_anerkannter_einrichtung: true
+    households:
+      haushalt:
+        adults: [elternteil]
+        children: [kind]
+  output:
+    persons:
+      kind:
+        kibg_anspruchsberechtigt: false
+
+- name: Zwei Erziehungsberechtigte mit zusammen 120 Prozent
+  period: 2026-08
+  input:
+    persons:
+      elternteil_1:
+        wohnsitz_im_kanton: true
+        erziehungsberechtigt: true
+        beschaeftigungsgrad: 60
+      elternteil_2:
+        wohnsitz_im_kanton: true
+        erziehungsberechtigt: true
+        beschaeftigungsgrad: 60
+      kind:
+        alter_in_monaten: 18
+        faktische_obhut: true
+        betreuung_in_anspruch: true
+        betreuung_in_anerkannter_einrichtung: true
+    households:
+      haushalt:
+        adults: [elternteil_1, elternteil_2]
+        children: [kind]
+  output:
+    persons:
+      elternteil_1:
+        kibg_anspruchsberechtigt: false
+      elternteil_2:
+        kibg_anspruchsberechtigt: false
+      kind:
+        kibg_anspruchsberechtigt: true
+
+- name: Zwei Erziehungsberechtigte mit 100 und 20 Prozent
+  period: 2026-08
+  input:
+    persons:
+      elternteil_1:
+        wohnsitz_im_kanton: true
+        erziehungsberechtigt: true
+        beschaeftigungsgrad: 100
+      elternteil_2:
+        wohnsitz_im_kanton: true
+        erziehungsberechtigt: true
+        beschaeftigungsgrad: 20
+      kind:
+        alter_in_monaten: 18
+        faktische_obhut: true
+        betreuung_in_anspruch: true
+        betreuung_in_anerkannter_einrichtung: true
+    households:
+      haushalt:
+        adults: [elternteil_1, elternteil_2]
+        children: [kind]
+  output:
+    persons:
+      kind:
+        kibg_anspruchsberechtigt: true
+
+- name: Zwei Erziehungsberechtigte mit 120 und 0 Prozent erfuellen den Wortlaut
+  period: 2026-08
+  input:
+    persons:
+      elternteil_1:
+        wohnsitz_im_kanton: true
+        erziehungsberechtigt: true
+        beschaeftigungsgrad: 120
+      elternteil_2:
+        wohnsitz_im_kanton: true
+        erziehungsberechtigt: true
+        beschaeftigungsgrad: 0
+      kind:
+        alter_in_monaten: 18
+        faktische_obhut: true
+        betreuung_in_anspruch: true
+        betreuung_in_anerkannter_einrichtung: true
+    households:
+      haushalt:
+        adults: [elternteil_1, elternteil_2]
+        children: [kind]
+  output:
+    persons:
+      kind:
+        kibg_anspruchsberechtigt: true
+
+- name: Zwei Erziehungsberechtigte mit zusammen 119 Prozent reichen nicht
+  period: 2026-08
+  input:
+    persons:
+      elternteil_1:
+        wohnsitz_im_kanton: true
+        erziehungsberechtigt: true
+        beschaeftigungsgrad: 100
+      elternteil_2:
+        wohnsitz_im_kanton: true
+        erziehungsberechtigt: true
+        beschaeftigungsgrad: 19
+      kind:
+        alter_in_monaten: 18
+        faktische_obhut: true
+        betreuung_in_anspruch: true
+        betreuung_in_anerkannter_einrichtung: true
+    households:
+      haushalt:
+        adults: [elternteil_1, elternteil_2]
+        children: [kind]
+  output:
+    persons:
+      kind:
+        kibg_anspruchsberechtigt: false
+
+- name: Zwei Erziehungsberechtigte ohne Pensum, eine familiare Belastung
+  period: 2026-08
+  input:
+    persons:
+      elternteil_1:
+        wohnsitz_im_kanton: true
+        erziehungsberechtigt: true
+        beschaeftigungsgrad: 0
+        familiaere_belastung: true
+      elternteil_2:
+        wohnsitz_im_kanton: true
+        erziehungsberechtigt: true
+        beschaeftigungsgrad: 0
+      kind:
+        alter_in_monaten: 18
+        faktische_obhut: true
+        betreuung_in_anspruch: true
+        betreuung_in_anerkannter_einrichtung: true
+    households:
+      haushalt:
+        adults: [elternteil_1, elternteil_2]
+        children: [kind]
+  output:
+    persons:
+      kind:
+        kibg_anspruchsberechtigt: true
+
+- name: Fehlt einer erziehungsberechtigten Person der Wohnsitz, kein Anspruch
+  period: 2026-08
+  input:
+    persons:
+      elternteil_1:
+        wohnsitz_im_kanton: true
+        erziehungsberechtigt: true
+        beschaeftigungsgrad: 80
+      elternteil_2:
+        wohnsitz_im_kanton: false
+        erziehungsberechtigt: true
+        beschaeftigungsgrad: 80
+      kind:
+        alter_in_monaten: 18
+        faktische_obhut: true
+        betreuung_in_anspruch: true
+        betreuung_in_anerkannter_einrichtung: true
+    households:
+      haushalt:
+        adults: [elternteil_1, elternteil_2]
+        children: [kind]
+  output:
+    persons:
+      kind:
+        kibg_anspruchsberechtigt: false
+
+- name: Partner ohne Erziehungsberechtigung zaehlt nicht zur 120-Prozent-Regel
+  period: 2026-08
+  input:
+    persons:
+      elternteil:
+        wohnsitz_im_kanton: true
+        erziehungsberechtigt: true
+        beschaeftigungsgrad: 20
+      partnerin:
+        wohnsitz_im_kanton: true
+        erziehungsberechtigt: false
+        beschaeftigungsgrad: 0
+      kind:
+        alter_in_monaten: 30
+        faktische_obhut: true
+        betreuung_in_anspruch: true
+        betreuung_in_anerkannter_einrichtung: true
+    households:
+      haushalt:
+        adults: [elternteil, partnerin]
+        children: [kind]
+  output:
+    persons:
+      elternteil:
+        kibg_anspruchsberechtigt: false
+      partnerin:
+        kibg_anspruchsberechtigt: false
+      kind:
+        kibg_anspruchsberechtigt: true
+
+- name: Pensum der Partnerin ohne Erziehungsberechtigung zaehlt nicht
+  period: 2026-08
+  input:
+    persons:
+      elternteil:
+        wohnsitz_im_kanton: true
+        erziehungsberechtigt: true
+        beschaeftigungsgrad: 10
+      partnerin:
+        wohnsitz_im_kanton: true
+        erziehungsberechtigt: false
+        beschaeftigungsgrad: 110
+      kind:
+        alter_in_monaten: 30
+        faktische_obhut: true
+        betreuung_in_anspruch: true
+        betreuung_in_anerkannter_einrichtung: true
+    households:
+      haushalt:
+        adults: [elternteil, partnerin]
+        children: [kind]
+  output:
+    persons:
+      kind:
+        kibg_anspruchsberechtigt: false
+
+- name: Wohnsitz der Partnerin ohne Erziehungsberechtigung ist unerheblich
+  period: 2026-08
+  input:
+    persons:
+      elternteil:
+        wohnsitz_im_kanton: true
+        erziehungsberechtigt: true
+        beschaeftigungsgrad: 40
+      partnerin:
+        wohnsitz_im_kanton: false
+        erziehungsberechtigt: false
+        beschaeftigungsgrad: 100
+      kind:
+        alter_in_monaten: 30
+        faktische_obhut: true
+        betreuung_in_anspruch: true
+        betreuung_in_anerkannter_einrichtung: true
+    households:
+      haushalt:
+        adults: [elternteil, partnerin]
+        children: [kind]
+  output:
+    persons:
+      kind:
+        kibg_anspruchsberechtigt: true
+
+- name: Geschwister werden getrennt beurteilt
+  period: 2026-08
+  input:
+    persons:
+      elternteil:
+        wohnsitz_im_kanton: true
+        erziehungsberechtigt: true
+        beschaeftigungsgrad: 80
+      kind:
+        alter_in_monaten: 24
+        faktische_obhut: true
+        betreuung_in_anspruch: true
+        betreuung_in_anerkannter_einrichtung: true
+      geschwister:
+        alter_in_monaten: 1
+        faktische_obhut: true
+        betreuung_in_anspruch: true
+        betreuung_in_anerkannter_einrichtung: true
+    households:
+      haushalt:
+        adults: [elternteil]
+        children: [kind, geschwister]
+  output:
+    persons:
+      kind:
+        kibg_anspruchsberechtigt: true
+      geschwister:
+        kibg_anspruchsberechtigt: false
