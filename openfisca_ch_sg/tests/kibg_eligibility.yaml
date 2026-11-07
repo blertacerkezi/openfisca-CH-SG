@@ -663,3 +663,103 @@
         kibg_anspruchsberechtigt: true
       geschwister:
         kibg_anspruchsberechtigt: false
+
+- name: Pensum unter der Schwelle macht den Sonderantrag nötig
+  period: 2026-08
+  input:
+    persons:
+      elternteil:
+        wohnsitz_im_kanton: true
+        erziehungsberechtigt: true
+        beschaeftigungsgrad: 19
+      kind:
+        alter_in_monaten: 24
+        faktische_obhut: true
+        betreuung_in_anspruch: true
+        betreuung_in_anerkannter_einrichtung: true
+    households:
+      haushalt:
+        adults: [elternteil]
+        children: [kind]
+  output:
+    persons:
+      elternteil:
+        erwerbstaetig: true
+      kind:
+        kibg_anspruchsberechtigt: false
+        kibg_sonderantrag_noetig: true
+
+- name: Erfülltes Pensum braucht keinen Sonderantrag
+  period: 2026-08
+  input:
+    persons:
+      elternteil:
+        wohnsitz_im_kanton: true
+        erziehungsberechtigt: true
+        beschaeftigungsgrad: 20
+      kind:
+        alter_in_monaten: 24
+        faktische_obhut: true
+        betreuung_in_anspruch: true
+        betreuung_in_anerkannter_einrichtung: true
+    households:
+      haushalt:
+        adults: [elternteil]
+        children: [kind]
+  output:
+    persons:
+      elternteil:
+        erwerbstaetig: true
+      kind:
+        kibg_anspruchsberechtigt: true
+        kibg_sonderantrag_noetig: false
+
+- name: Ausnahme statt Sonderantrag, und ohne Pensum nicht erwerbstätig
+  period: 2026-08
+  input:
+    persons:
+      elternteil:
+        wohnsitz_im_kanton: true
+        erziehungsberechtigt: true
+        beschaeftigungsgrad: 0
+        berufliche_integration: true
+      kind:
+        alter_in_monaten: 12
+        faktische_obhut: true
+        betreuung_in_anspruch: true
+        betreuung_in_anerkannter_einrichtung: true
+    households:
+      haushalt:
+        adults: [elternteil]
+        children: [kind]
+  output:
+    persons:
+      elternteil:
+        erwerbstaetig: false
+      kind:
+        kibg_anspruchsberechtigt: true
+        kibg_sonderantrag_noetig: false
+
+- name: Sonderantrag entfällt, wenn schon das Alter fehlt
+  period: 2026-08
+  input:
+    persons:
+      elternteil:
+        wohnsitz_im_kanton: true
+        erziehungsberechtigt: true
+        beschaeftigungsgrad: 0
+      kind:
+        alter_in_monaten: 1
+        faktische_obhut: true
+        betreuung_in_anspruch: true
+        betreuung_in_anerkannter_einrichtung: true
+    households:
+      haushalt:
+        adults: [elternteil]
+        children: [kind]
+  output:
+    persons:
+      kind:
+        kibg_anspruchsberechtigt: false
+        kibg_sonderantrag_noetig: false
+

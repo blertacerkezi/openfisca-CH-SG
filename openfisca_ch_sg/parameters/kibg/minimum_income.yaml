@@ -1,7 +1,7 @@
-description: Minimum income for the maximum childcare subsidy
+description: Einkommen, bis zu dem der Höchstbeitrag gilt
+metadata:
+  reference: Art. 15 KiBV
+  unit: currency-CHF
 values:
   2026-01-01:
     value: 40000
-metadata:
-  unit: currency-CHF
-  reference: KiBV Art. 15

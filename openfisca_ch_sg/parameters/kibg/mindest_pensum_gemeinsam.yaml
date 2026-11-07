@@ -1,0 +1,7 @@
+description: Mindestbeschäftigungsgrad mehrerer erziehungsberechtigter Personen zusammen
+metadata:
+  reference: Art. 4 Abs. 1 Bst. b KiBG
+  unit: percent
+values:
+  2020-01-01:
+    value: 120

@@ -1,26 +1,51 @@
+# Beitragsberechnung. Die Tests setzen das massgebende Einkommen direkt,
+# damit sie ohne Steuerdaten laufen.
+
 - name: Maximaler Grundbeitrag
   period: 2026-11
   input:
-    massgebendes_einkommen: 40000
-    kind_alter_monate: 12
-    betreuungsart: kita
+    persons:
+      kind:
+        massgebendes_einkommen: 40000
+        alter_in_monaten: 12
+        betreuungsart: kita
+    households:
+      haushalt:
+        children: [kind]
   output:
-    grundbeitrag_pro_stunde: 11.0
+    persons:
+      kind:
+        grundbeitrag_pro_stunde: 11.0
 
 - name: Reduzierter Grundbeitrag
   period: 2026-11
+  absolute_error_margin: 0.000001
   input:
-    massgebendes_einkommen: 70000
-    kind_alter_monate: 12
-    betreuungsart: kita
+    persons:
+      kind:
+        massgebendes_einkommen: 70000
+        alter_in_monaten: 12
+        betreuungsart: kita
+    households:
+      haushalt:
+        children: [kind]
   output:
-    grundbeitrag_pro_stunde: 8.105263
+    persons:
+      kind:
+        grundbeitrag_pro_stunde: 8.105263
 
 - name: Kein Grundbeitrag oberhalb der Einkommensgrenze
   period: 2026-11
   input:
-    massgebendes_einkommen: 160000
-    kind_alter_monate: 12
-    betreuungsart: kita
+    persons:
+      kind:
+        massgebendes_einkommen: 160000
+        alter_in_monaten: 12
+        betreuungsart: kita
+    households:
+      haushalt:
+        children: [kind]
   output:
-    grundbeitrag_pro_stunde: 0
+    persons:
+      kind:
+        grundbeitrag_pro_stunde: 0

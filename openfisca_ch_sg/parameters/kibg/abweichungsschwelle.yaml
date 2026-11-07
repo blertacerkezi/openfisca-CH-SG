@@ -1,0 +1,7 @@
+description: Mindestabweichung, ab der die aktuellen Gegebenheiten massgebend sind
+metadata:
+  reference: Art. 11 KiBV
+  unit: rate
+values:
+  2020-01-01:
+    value: 0.25

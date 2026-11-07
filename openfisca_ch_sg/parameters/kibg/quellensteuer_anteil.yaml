@@ -1,0 +1,7 @@
+description: Anteil des Bruttoeinkommens bei quellenbesteuerten Personen
+metadata:
+  reference: Art. 12bis Abs. 3 EG-KVG
+  unit: rate
+values:
+  2020-01-01:
+    value: 0.75

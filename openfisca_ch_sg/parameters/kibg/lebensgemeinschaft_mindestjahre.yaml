@@ -1,0 +1,7 @@
+description: Mindestjahre einer ununterbrochenen Lebensgemeinschaft
+metadata:
+  reference: Art. 8 Abs. 2 KiBV
+  unit: year
+values:
+  2020-01-01:
+    value: 2

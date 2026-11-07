@@ -1,0 +1,7 @@
+description: Mindestbeschäftigungsgrad einer einzelnen erziehungsberechtigten Person
+metadata:
+  reference: Art. 4 Abs. 1 Bst. a KiBG
+  unit: percent
+values:
+  2020-01-01:
+    value: 20

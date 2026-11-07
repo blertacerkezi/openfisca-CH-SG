@@ -1,0 +1,7 @@
+description: Hinzuzurechnender Anteil des Eigenmietwerts
+metadata:
+  reference: Art. 12 Abs. 2 Ziff. 5quinquies EG-KVG
+  unit: rate
+values:
+  2020-01-01:
+    value: 0.3

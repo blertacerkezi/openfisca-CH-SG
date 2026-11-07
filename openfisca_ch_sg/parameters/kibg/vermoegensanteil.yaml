@@ -1,0 +1,7 @@
+description: Anteil des steuerbaren Vermögens, der dem Einkommen zugerechnet wird
+metadata:
+  reference: Art. 12 Abs. 2 Ziff. 1 EG-KVG und Art. 9 Bst. b KiBV
+  unit: rate
+values:
+  2020-01-01:
+    value: 0.2

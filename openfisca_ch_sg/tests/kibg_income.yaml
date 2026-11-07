@@ -1,0 +1,327 @@
+# Massgebendes Einkommen. Ablage: openfisca_ch_sg/tests/kibg_income.yaml
+# Steuerinputs liegen auf dem vorletzten Jahr. Bezugsmonat in den
+# Haushaltstests ist 2026-08, Steuerjahr also 2024.
+# Fehlende Art.-12-Beträge sind 0. Kinderabzug 4000 je Kind, nur bei
+# ordentlich besteuerten Personen.
+
+- name: Ordentlich, Reineinkommen plus 20 Prozent Vermögen
+  period: 2024
+  input:
+    persons:
+      elternteil:
+        reineinkommen: 50000
+        steuerbares_vermoegen: 100000
+  output:
+    persons:
+      elternteil:
+        kibg_einkommen_person: 70000
+
+- name: Fehlende Art.-12-Inputs zählen als 0
+  period: 2024
+  input:
+    persons:
+      elternteil:
+        reineinkommen: 10000
+  output:
+    persons:
+      elternteil:
+        kibg_einkommen_person: 10000
+
+- name: Alle Zuschläge von Art. 12
+  period: 2024
+  input:
+    persons:
+      elternteil:
+        reineinkommen: 10000
+        steuerbares_vermoegen: 10000
+        beitraege_saeule_3a: 1000
+        bvg_leistungen_und_einkauf: 1000
+        liegenschaftsaufwand_ueber_pauschale: 1000
+        vorjahresverlust: 1000
+        bruttolohn_vereinfachtes_verfahren: 1000
+        freiwillige_zuwendungen: 1000
+        eigenmietwert: 1000
+        ertrag_qualifizierte_beteiligung_geschaeft: 1000
+        ertrag_qualifizierte_beteiligung_privat: 1000
+        uebrige_zuschlaege: 1000
+  output:
+    persons:
+      elternteil:
+        kibg_einkommen_person: 19650
+
+- name: Quellensteuer zählt 75 Prozent und keinen Kinderabzug
+  period: 2026-08
+  input:
+    persons:
+      elternteil:
+        erziehungsberechtigt: true
+        quellenbesteuert:
+          2024: true
+        bruttoeinkommen_quellensteuer:
+          2024: 80000
+      kind: {}
+    households:
+      haushalt:
+        adults: [elternteil]
+        children: [kind]
+  output:
+    households:
+      haushalt:
+        kibg_einkommen_aus_veranlagung: 60000
+        kibg_massgebendes_einkommen: 60000
+
+- name: Grenzgängerindex wird nur bei Quellensteuer angewendet
+  period: 2024
+  input:
+    persons:
+      elternteil:
+        quellenbesteuert: true
+        grenzgaenger: true
+        kaufkraftindex: 0.5
+        bruttoeinkommen_quellensteuer: 80000
+  output:
+    persons:
+      elternteil:
+        kibg_einkommen_person: 30000
+
+- name: Haushalt mit einem Kind zieht 4000 ab
+  period: 2026-08
+  input:
+    persons:
+      elternteil:
+        erziehungsberechtigt: true
+        reineinkommen:
+          2024: 44000
+      kind: {}
+    households:
+      haushalt:
+        adults: [elternteil]
+        children: [kind]
+  output:
+    households:
+      haushalt:
+        kibg_massgebendes_einkommen: 40000
+
+- name: Zwei Kinder, Abzug 8000
+  period: 2026-08
+  input:
+    persons:
+      elternteil:
+        erziehungsberechtigt: true
+        reineinkommen:
+          2024: 50000
+      kind: {}
+      geschwister: {}
+    households:
+      haushalt:
+        adults: [elternteil]
+        children: [kind, geschwister]
+  output:
+    households:
+      haushalt:
+        kibg_massgebendes_einkommen: 42000
+
+- name: Zwei Erziehungsberechtigte werden addiert, Abzug einmal
+  period: 2026-08
+  input:
+    persons:
+      elternteil_1:
+        erziehungsberechtigt: true
+        reineinkommen:
+          2024: 30000
+      elternteil_2:
+        erziehungsberechtigt: true
+        reineinkommen:
+          2024: 20000
+      kind: {}
+    households:
+      haushalt:
+        adults: [elternteil_1, elternteil_2]
+        children: [kind]
+  output:
+    households:
+      haushalt:
+        kibg_massgebendes_einkommen: 46000
+
+- name: Partner ohne Lebensgemeinschaft zählt nicht
+  period: 2026-08
+  input:
+    persons:
+      elternteil:
+        erziehungsberechtigt: true
+        reineinkommen:
+          2024: 44000
+      partnerin:
+        erziehungsberechtigt: false
+        reineinkommen:
+          2024: 100000
+      kind: {}
+    households:
+      haushalt:
+        adults: [elternteil, partnerin]
+        children: [kind]
+  output:
+    households:
+      haushalt:
+        gefaestigte_lebensgemeinschaft:
+          2026: false
+        kibg_massgebendes_einkommen: 40000
+
+- name: Ehepartner zählt mit, auch ohne eigene Erziehungsberechtigung
+  period: 2026-08
+  input:
+    persons:
+      elternteil:
+        erziehungsberechtigt: true
+        verheiratet:
+          2026: true
+        reineinkommen:
+          2024: 30000
+      partnerin:
+        erziehungsberechtigt: false
+        reineinkommen:
+          2024: 20000
+      kind: {}
+    households:
+      haushalt:
+        adults: [elternteil, partnerin]
+        children: [kind]
+  output:
+    households:
+      haushalt:
+        gefaestigte_lebensgemeinschaft:
+          2026: true
+        kibg_massgebendes_einkommen: 46000
+
+- name: Lebensgemeinschaft ab 2 Jahren zählt mit
+  period: 2026-08
+  input:
+    persons:
+      elternteil:
+        erziehungsberechtigt: true
+        lebensgemeinschaft_jahre:
+          2026: 2
+        reineinkommen:
+          2024: 30000
+      partnerin:
+        reineinkommen:
+          2024: 10000
+      kind: {}
+    households:
+      haushalt:
+        adults: [elternteil, partnerin]
+        children: [kind]
+  output:
+    households:
+      haushalt:
+        gefaestigte_lebensgemeinschaft:
+          2026: true
+        kibg_massgebendes_einkommen: 36000
+
+- name: Lebensgemeinschaft von einem Jahr zählt nicht
+  period: 2026-08
+  input:
+    persons:
+      elternteil:
+        erziehungsberechtigt: true
+        lebensgemeinschaft_jahre:
+          2026: 1
+        reineinkommen:
+          2024: 44000
+      partnerin:
+        reineinkommen:
+          2024: 80000
+      kind: {}
+    households:
+      haushalt:
+        adults: [elternteil, partnerin]
+        children: [kind]
+  output:
+    households:
+      haushalt:
+        gefaestigte_lebensgemeinschaft:
+          2026: false
+        kibg_massgebendes_einkommen: 40000
+
+- name: Abweichung von genau 25 Prozent macht die aktuelle Situation massgebend
+  period: 2026-08
+  input:
+    persons:
+      elternteil:
+        erziehungsberechtigt: true
+        reineinkommen:
+          2024: 44000
+        aktuelle_situation_bekannt:
+          2026: true
+        einkommen_aktuelle_gegebenheiten:
+          2026: 30000
+      kind: {}
+    households:
+      haushalt:
+        adults: [elternteil]
+        children: [kind]
+  output:
+    households:
+      haushalt:
+        kibg_einkommen_aus_veranlagung: 40000
+        kibg_massgebendes_einkommen: 30000
+
+- name: Kleinere Abweichung lässt die Veranlagung stehen
+  period: 2026-08
+  input:
+    persons:
+      elternteil:
+        erziehungsberechtigt: true
+        reineinkommen:
+          2024: 44000
+        aktuelle_situation_bekannt:
+          2026: true
+        einkommen_aktuelle_gegebenheiten:
+          2026: 31000
+      kind: {}
+    households:
+      haushalt:
+        adults: [elternteil]
+        children: [kind]
+  output:
+    households:
+      haushalt:
+        kibg_massgebendes_einkommen: 40000
+
+- name: Ohne bekannte aktuelle Situation bleibt die Veranlagung
+  period: 2026-08
+  input:
+    persons:
+      elternteil:
+        erziehungsberechtigt: true
+        reineinkommen:
+          2024: 44000
+        einkommen_aktuelle_gegebenheiten:
+          2026: 1000
+      kind: {}
+    households:
+      haushalt:
+        adults: [elternteil]
+        children: [kind]
+  output:
+    households:
+      haushalt:
+        kibg_massgebendes_einkommen: 40000
+
+- name: Kinderabzug kann das Einkommen nicht unter 0 drücken
+  period: 2026-08
+  input:
+    persons:
+      elternteil:
+        erziehungsberechtigt: true
+        reineinkommen:
+          2024: 1000
+      kind: {}
+    households:
+      haushalt:
+        adults: [elternteil]
+        children: [kind]
+  output:
+    households:
+      haushalt:
+        kibg_massgebendes_einkommen: 0

@@ -1,0 +1,7 @@
+description: Mindestalter des Kindes in Monaten
+metadata:
+  reference: Art. 4 Abs. 3 KiBG
+  unit: month
+values:
+  2020-01-01:
+    value: 3

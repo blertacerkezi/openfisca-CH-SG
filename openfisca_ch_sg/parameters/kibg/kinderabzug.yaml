@@ -1,0 +1,7 @@
+description: Kinderabzug je Kind im Haushalt
+metadata:
+  reference: Art. 9 Bst. b KiBV und Art. 12 Abs. 2 Ziff. 6 EG-KVG
+  unit: currency-CHF
+values:
+  2020-01-01:
+    value: 4000

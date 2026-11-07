@@ -1,0 +1,7 @@
+description: Anteil des im vereinfachten Verfahren abgerechneten Bruttolohns
+metadata:
+  reference: Art. 12 Abs. 2 Ziff. 5bis EG-KVG
+  unit: rate
+values:
+  2020-01-01:
+    value: 0.75

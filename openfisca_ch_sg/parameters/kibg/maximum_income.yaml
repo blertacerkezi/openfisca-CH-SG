@@ -1,7 +1,7 @@
-description: Income threshold for childcare subsidy eligibility
+description: Einkommen, ab dem kein Beitrag mehr gilt
+metadata:
+  reference: Art. 15 KiBV
+  unit: currency-CHF
 values:
   2026-01-01:
     value: 154000
-metadata:
-  unit: currency-CHF
-  reference: KiBV Art. 15
