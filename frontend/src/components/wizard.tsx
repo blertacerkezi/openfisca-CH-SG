@@ -667,6 +667,9 @@ function Num({
         type="number"
         min={0}
         value={Number.isFinite(value) ? value : 0}
+        onFocus={(e) => {
+          if (e.currentTarget.value === "0") e.currentTarget.select();
+        }}
         onChange={(e) => onChange(Number(e.target.value))}
         className="mt-1 min-h-11 w-full rounded-card border border-line bg-card px-3 text-ink"
       />

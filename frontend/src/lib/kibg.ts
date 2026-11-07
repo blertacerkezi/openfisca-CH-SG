@@ -1,3 +1,4 @@
+
 export const REF = new Date(2026, 10, 1);
 export const TAX_YEAR = 2024;
 export const MIN_INCOME = 40_000;
@@ -17,6 +18,8 @@ export type DayCare = {
   hours: number;
   type: CareType;
   obhut: boolean;
+  /** Elternferien: Das Kind wird zu Hause betreut. */
+  elternferien?: boolean;
 };
 
 export type ChildInput = {
@@ -96,7 +99,8 @@ export function ageMonths(birth: string, ref = REF) {
   const b = new Date(birth + "T00:00:00");
   if (Number.isNaN(b.getTime())) return 0;
   let months =
-    (ref.getFullYear() - b.getFullYear()) * 12 + (ref.getMonth() - b.getMonth());
+    (ref.getFullYear() - b.getFullYear()) * 12 +
+    (ref.getMonth() - b.getMonth());
   if (ref.getDate() < b.getDate()) months -= 1;
   return months;
 }
@@ -113,7 +117,11 @@ export function primaryFinished(child: ChildInput, ref = REF) {
   return d.getTime() <= ref.getTime();
 }
 
-export function maxHourly(type: CareType, months: number, enrolled: boolean) {
+export function maxHourly(
+  type: CareType,
+  months: number,
+  enrolled: boolean,
+) {
   if (type === "schulergaenzend") return enrolled ? 5.5 : 0;
   if (type === "kita") {
     if (enrolled || months >= 18) return 7.5;
@@ -131,19 +139,29 @@ export function partnerCountsForIncome(h: HouseholdInput) {
 }
 
 export function ebCount(h: HouseholdInput) {
-  if (h.zusammen === "gemeinsam") return h.erwerb === "beide" ? 2 : 1;
+  if (h.zusammen === "gemeinsam") {
+    return h.erwerb === "beide" ? 2 : 1;
+  }
   if (h.getrenntArt === "ehe") return 2;
-  if (h.getrenntArt === "konkubinat" && h.partnerErziehungsberechtigt) return 2;
+  if (
+    h.getrenntArt === "konkubinat" &&
+    h.partnerErziehungsberechtigt
+  ) return 2;
   return 1;
 }
 
 export function thresholdMet(h: HouseholdInput) {
   const n = ebCount(h);
   const sum = n === 1 ? h.pensum1 : h.pensum1 + h.pensum2;
-  return n === 1 ? sum >= PENSUM_ALONE : sum >= PENSUM_TOGETHER;
+  return n === 1
+    ? sum >= PENSUM_ALONE
+    : sum >= PENSUM_TOGETHER;
 }
 
-export function exceptionGranted(h: HouseholdInput, children: ChildInput[]) {
+export function exceptionGranted(
+  h: HouseholdInput,
+  children: ChildInput[],
+) {
   return (
     h.integration1 ||
     h.integration2 ||
@@ -153,16 +171,25 @@ export function exceptionGranted(h: HouseholdInput, children: ChildInput[]) {
   );
 }
 
-export function pensumMet(h: HouseholdInput, children: ChildInput[] = []) {
+export function pensumMet(
+  h: HouseholdInput,
+  children: ChildInput[] = [],
+) {
   return thresholdMet(h) || exceptionGranted(h, children);
 }
 
 export function needsDeclaration(h: HouseholdInput) {
-  return h.taxPath === "nicht-rechtskraeftig" || h.taxPath === "keine-veranlagung";
+  return (
+    h.taxPath === "nicht-rechtskraeftig" ||
+    h.taxPath === "keine-veranlagung"
+  );
 }
 
 export function needsMeldung(h: HouseholdInput) {
-  return (h.wohnsitz === true && !thresholdMet(h)) || needsDeclaration(h);
+  return (
+    (h.wohnsitz === true && !thresholdMet(h)) ||
+    needsDeclaration(h)
+  );
 }
 
 function ordinaryPerson(p: IncomeInput) {
@@ -186,11 +213,17 @@ function evidencePerson(p: IncomeInput) {
 }
 
 function quellenPerson(p: IncomeInput) {
-  const base = (p.bruttoQuellen + p.bruttolohnEinfach) * 0.75;
-  return p.grenzgaenger ? base * (p.kaufkraft || 1) : base;
+  const base =
+    (p.bruttoQuellen + p.bruttolohnEinfach) * 0.75;
+  return p.grenzgaenger
+    ? base * (p.kaufkraft || 1)
+    : base;
 }
 
-export function personFromTax(p: IncomeInput, path: TaxPath) {
+export function personFromTax(
+  p: IncomeInput,
+  path: TaxPath,
+) {
   if (path === "quellen") return quellenPerson(p);
   if (path === "keine-veranlagung") return evidencePerson(p);
   return ordinaryPerson(p);
@@ -230,35 +263,87 @@ export function assess(
 ): Result {
   const path = h.taxPath ?? "ordentlich";
   const includePartner = partnerCountsForIncome(h);
-  const persons = includePartner ? [h.income1, h.income2] : [h.income1];
-  const taxIncomeRaw = persons.reduce((s, p) => s + personFromTax(p, path), 0);
-  const deduction = path === "quellen" ? 0 : children.length * CHILD_DEDUCTION;
-  const taxIncome = Math.max(0, taxIncomeRaw - deduction);
-  const aktuell = persons.reduce((s, p) => s + (p.aktuellBekannt ? p.aktuell : 0), 0);
-  const bekannt = persons.some((p) => p.aktuellBekannt);
+  const persons = includePartner
+    ? [h.income1, h.income2]
+    : [h.income1];
+
+  const taxIncomeRaw = persons.reduce(
+    (s, p) => s + personFromTax(p, path),
+    0,
+  );
+  const deduction =
+    path === "quellen"
+      ? 0
+      : children.length * CHILD_DEDUCTION;
+
+  const taxIncome = Math.max(
+    0,
+    taxIncomeRaw - deduction,
+  );
+
+  const aktuell = persons.reduce(
+    (s, p) => s + (p.aktuellBekannt ? p.aktuell : 0),
+    0,
+  );
+  const bekannt = persons.some(
+    (p) => p.aktuellBekannt,
+  );
   const deviation =
-    taxIncome === 0 ? (aktuell !== 0 ? 1 : 0) : Math.abs(aktuell - taxIncome) / taxIncome;
+    taxIncome === 0
+      ? aktuell !== 0 ? 1 : 0
+      : Math.abs(aktuell - taxIncome) / taxIncome;
+
   const usedCurrent = bekannt && deviation >= 0.25;
-  const base = incomeOverride ?? (usedCurrent ? Math.max(0, aktuell) : taxIncome);
-  const faktor = Math.min(1, Math.max(0, (MAX_INCOME - base) / (MAX_INCOME - MIN_INCOME)));
+  const base =
+    incomeOverride ??
+    (usedCurrent ? Math.max(0, aktuell) : taxIncome);
+
+  const faktor = Math.min(
+    1,
+    Math.max(
+      0,
+      (MAX_INCOME - base) / (MAX_INCOME - MIN_INCOME),
+    ),
+  );
+
   const eb = ebCount(h);
-  const pensumOk = h.wohnsitz === true && pensumMet(h, children);
-  const sonderantrag = h.wohnsitz === true && !pensumMet(h, children) && eb >= 1;
+  const pensumOk =
+    h.wohnsitz === true && pensumMet(h, children);
+
+  const sonderantrag =
+    h.wohnsitz === true &&
+    !pensumMet(h, children) &&
+    eb >= 1;
 
   const rows = children.map((child) => {
     const months = ageMonths(child.birth);
     const enrolled = isEnrolled(child);
     const finished = primaryFinished(child);
+
     let hours = 0;
     let hypothetical = 0;
+
     for (const day of Object.values(child.days)) {
-      if (!day.obhut || day.hours <= 0) continue;
+      // Elternferien mit Betreuung zu Hause
+      // ergeben keine externen Betreuungsstunden.
+      if (
+        day.elternferien ||
+        !day.obhut ||
+        day.hours <= 0
+      ) continue;
+
       hours += day.hours;
-      const rate = maxHourly(day.type, months, enrolled);
+      const rate = maxHourly(
+        day.type,
+        months,
+        enrolled,
+      );
       hypothetical += day.hours * rate * faktor;
     }
+
     let reason = "Anspruch";
     let eligible = true;
+
     if (h.wohnsitz !== true) {
       eligible = false;
       reason = "Kein Wohnsitz im Kanton";
@@ -275,6 +360,7 @@ export function assess(
       eligible = false;
       reason = "Pensum nicht erreicht";
     }
+
     return {
       id: child.id,
       name: child.name,
@@ -292,7 +378,14 @@ export function assess(
   return {
     wohnsitzOk: h.wohnsitz === true,
     pensumOk,
-    sonderantrag: sonderantrag && rows.some((c) => c.months >= 3 && !c.finished && c.hours > 0),
+    sonderantrag:
+      sonderantrag &&
+      rows.some(
+        (c) =>
+          c.months >= 3 &&
+          !c.finished &&
+          c.hours > 0,
+      ),
     eb,
     taxIncome,
     massgebend: base,
@@ -300,22 +393,45 @@ export function assess(
     deviation,
     faktor,
     children: rows,
-    hours: rows.reduce((s, c) => s + c.hours, 0),
-    subsidy: rows.reduce((s, c) => s + c.subsidy, 0),
-    hypothetical: rows.reduce((s, c) => s + (c.months >= 3 && !c.finished ? c.hypothetical : 0), 0),
+    hours: rows.reduce(
+      (s, c) => s + c.hours,
+      0,
+    ),
+    subsidy: rows.reduce(
+      (s, c) => s + c.subsidy,
+      0,
+    ),
+    hypothetical: rows.reduce(
+      (s, c) =>
+        s +
+        (c.months >= 3 && !c.finished
+          ? c.hypothetical
+          : 0),
+      0,
+    ),
   };
 }
 
-export function curve(h: HouseholdInput, children: ChildInput[]) {
+export function curve(
+  h: HouseholdInput,
+  children: ChildInput[],
+) {
   const points = [];
-  for (let income = 0; income <= 180_000; income += 5_000) {
+
+  for (
+    let income = 0;
+    income <= 180_000;
+    income += 5_000
+  ) {
     const r = assess(h, children, income);
     points.push({
       einkommen: income,
       beitrag: Math.round(r.hypothetical),
-      stunde: Math.round(r.faktor * 11 * 100) / 100,
+      stunde:
+        Math.round(r.faktor * 11 * 100) / 100,
     });
   }
+
   return points;
 }
 
