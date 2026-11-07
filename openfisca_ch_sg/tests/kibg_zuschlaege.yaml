@@ -1,0 +1,54 @@
+
+- name: Ohne Gemeindezuschlaege
+  period: 2026-11
+  input:
+    maximaler_stundenbeitrag: 11
+    einkommensfaktor: 0.5
+    zusatzbeitrag_z1: 0
+    zusatzbeitrag_z2: 0
+  output:
+    gesamter_stundenbeitrag: 5.5
+
+- name: Beide Gemeindezuschlaege
+  period: 2026-11
+  input:
+    maximaler_stundenbeitrag: 11
+    einkommensfaktor: 0.5
+    zusatzbeitrag_z1: 2
+    zusatzbeitrag_z2: 1
+  output:
+    gesamter_stundenbeitrag: 7.5
+
+- name: Maximaler Einkommensfaktor
+  period: 2026-11
+  input:
+    maximaler_stundenbeitrag: 11
+    einkommensfaktor: 1
+    zusatzbeitrag_z1: 2
+    zusatzbeitrag_z2: 1
+  output:
+    gesamter_stundenbeitrag: 14
+
+- name: Nur einkommensunabhaengiger Zuschlag
+  period: 2026-11
+  input:
+    maximaler_stundenbeitrag: 11
+    einkommensfaktor: 0
+    zusatzbeitrag_z1: 2
+    zusatzbeitrag_z2: 1
+  output:
+    gesamter_stundenbeitrag: 1
+
+- name: Zuschlaege und Kostenbegrenzung
+  period: 2026-11
+  input:
+    maximaler_stundenbeitrag: 11
+    einkommensfaktor: 0.5
+    zusatzbeitrag_z1: 2
+    zusatzbeitrag_z2: 1
+    anrechenbare_betreuungsstunden: 80
+    betreuungskosten_im_monat: 500
+  output:
+    gesamter_stundenbeitrag: 7.5
+    beitrag_vor_kostenbegrenzung: 600
+    beitrag_nach_kostenbegrenzung: 500

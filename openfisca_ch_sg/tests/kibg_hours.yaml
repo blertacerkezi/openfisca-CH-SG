@@ -1,0 +1,24 @@
+
+- name: Zehn Stunden an acht Tagen
+  period: 2026-11
+  input:
+    betreuungsstunden_pro_tag: 10
+    betreuungstage_im_monat: 8
+  output:
+    anrechenbare_betreuungsstunden: 80
+
+- name: Mehr als zwölf Stunden pro Tag
+  period: 2026-11
+  input:
+    betreuungsstunden_pro_tag: 14
+    betreuungstage_im_monat: 8
+  output:
+    anrechenbare_betreuungsstunden: 96
+
+- name: Keine Betreuungstage
+  period: 2026-11
+  input:
+    betreuungsstunden_pro_tag: 10
+    betreuungstage_im_monat: 0
+  output:
+    anrechenbare_betreuungsstunden: 0

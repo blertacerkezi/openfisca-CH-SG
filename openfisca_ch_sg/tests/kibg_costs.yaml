@@ -1,0 +1,32 @@
+
+- name: Beitrag kleiner als Betreuungskosten
+  period: 2026-11
+  input:
+    beitrag_vor_kostenbegrenzung: 500
+    betreuungskosten_im_monat: 700
+  output:
+    beitrag_nach_kostenbegrenzung: 500
+
+- name: Beitrag groesser als Betreuungskosten
+  period: 2026-11
+  input:
+    beitrag_vor_kostenbegrenzung: 880
+    betreuungskosten_im_monat: 700
+  output:
+    beitrag_nach_kostenbegrenzung: 700
+
+- name: Keine Betreuungskosten
+  period: 2026-11
+  input:
+    beitrag_vor_kostenbegrenzung: 880
+    betreuungskosten_im_monat: 0
+  output:
+    beitrag_nach_kostenbegrenzung: 0
+
+- name: Negativer Beitrag
+  period: 2026-11
+  input:
+    beitrag_vor_kostenbegrenzung: -100
+    betreuungskosten_im_monat: 700
+  output:
+    beitrag_nach_kostenbegrenzung: 0

@@ -2,6 +2,7 @@
   period: 2026-11
   input:
     alter_in_monaten: 12
+    kind_eingeschult: false
     betreuungsart: kita
   output:
     maximaler_stundenbeitrag: 11.0
