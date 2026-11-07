@@ -1,18 +1,14 @@
 
-from datetime import date
+from decimal import Decimal, ROUND_HALF_UP
 
 from openfisca_core.simulation_builder import SimulationBuilder
 from openfisca_ch_sg import CountryTaxBenefitSystem
 
-from backend.betreuungskalender import (
-    betreuungsplan_berechnen,
+from backend.betreuungskalender import betreuungsplan_berechnen
+from backend.minutengenaue_berechnung import (
+    monatsminuten_berechnen,
+    beitrag_aus_minuten,
 )
-
-
-# ==================================================
-# KiBG-RECHNER
-# Verbindung zwischen Betreuungskalender und OpenFisca
-# ==================================================
 
 
 def kibg_beitraege_berechnen(
@@ -28,34 +24,29 @@ def kibg_beitraege_berechnen(
     ferien=None,
     ferienbetreuung=None,
     ausnahmen=None,
+    beschaeftigungsgrad=80,
+    wohnsitz_im_kanton=True,
+    anerkannte_einrichtung=True,
+    faktische_obhut=True,
+    primarschule_abgeschlossen=False,
+    kind_eingeschult=False,
+    berufliche_integration=False,
+    familiaere_belastung=False,
+    kindliche_indikation=False,
 ):
     """
-    Berechnet monatliche KiBG-Beiträge.
+    KiBG-Berechnung fuer einen Haushalt mit einem Elternteil
+    und einem Kind.
 
     einkommen:
-        Massgebendes Einkommen und Vermögen
-        gemäss KiBG, in CHF.
+        Jaehrliches Reineinkommen des Elternteils aus dem
+        vorletzten Steuerjahr, nicht das bereits berechnete
+        massgebende Haushaltseinkommen.
 
-    betreuungsart:
-        "kita", "tagesfamilie" oder
-        "schulergaenzend".
-
-    betreuungskosten_pro_monat:
-        Tatsächliche monatliche Betreuungskosten
-        in CHF.
-
-    z1:
-        Einkommensabhängiger kommunaler
-        Zusatzbeitrag pro Stunde.
-
-    z2:
-        Einkommensunabhängiger kommunaler
-        Zusatzbeitrag pro Stunde.
+    Weitere Steuerdaten und Mehrpersonenhaushalte muessen
+    spaeter ueber eine erweiterte Eingabeschnittstelle
+    unterstuetzt werden.
     """
-
-    # ----------------------------------------------
-    # 1. Betreuungskalender berechnen
-    # ----------------------------------------------
 
     kalender = betreuungsplan_berechnen(
         von=von,
@@ -66,39 +57,64 @@ def kibg_beitraege_berechnen(
         ausnahmen=ausnahmen,
     )
 
-    # ----------------------------------------------
-    # 2. OpenFisca vorbereiten
-    # ----------------------------------------------
-
-    tax_benefit_system = CountryTaxBenefitSystem()
+    monatsminuten = monatsminuten_berechnen(kalender)
+    system = CountryTaxBenefitSystem()
 
     ergebnisse = {}
-    gesamtbeitrag = 0.0
+    gesamtbeitrag = Decimal("0.00")
 
-    # ----------------------------------------------
-    # 3. Jeden Monat einzeln berechnen
-    # ----------------------------------------------
-
-    for monat, stunden in kalender[
-        "monatsstunden"
-    ].items():
+    for monat, minuten in monatsminuten.items():
+        steuerjahr = str(int(monat[:4]) - 2)
 
         simulation = SimulationBuilder().build_from_entities(
-            tax_benefit_system,
+            system,
             {
                 "persons": {
-                    "kind_1": {
+                    "elternteil": {
+                        "erziehungsberechtigt": {monat: True},
+                        "wohnsitz_im_kanton": {
+                            monat: wohnsitz_im_kanton
+                        },
+                        "beschaeftigungsgrad": {
+                            monat: beschaeftigungsgrad
+                        },
+                        "berufliche_integration": {
+                            monat: berufliche_integration
+                        },
+                        "familiaere_belastung": {
+                            monat: familiaere_belastung
+                        },
+                        "reineinkommen": {
+                            steuerjahr: einkommen
+                        },
+                    },
+                    "kind": {
                         "alter_in_monaten": {
                             monat: alter_in_monaten
                         },
                         "betreuungsart": {
                             monat: betreuungsart
                         },
-                        "massgebendes_einkommen": {
-                            monat: einkommen
+                        "kind_eingeschult": {
+                            monat: kind_eingeschult
+                        },
+                        "primarschule_abgeschlossen": {
+                            monat: primarschule_abgeschlossen
+                        },
+                        "faktische_obhut": {
+                            monat: faktische_obhut
+                        },
+                        "betreuung_in_anspruch": {
+                            monat: minuten > 0
+                        },
+                        "betreuung_in_anerkannter_einrichtung": {
+                            monat: anerkannte_einrichtung
+                        },
+                        "kindliche_indikation": {
+                            monat: kindliche_indikation
                         },
                         "anrechenbare_betreuungsstunden": {
-                            monat: stunden
+                            monat: minuten / 60
                         },
                         "betreuungskosten_im_monat": {
                             monat: betreuungskosten_pro_monat
@@ -109,38 +125,79 @@ def kibg_beitraege_berechnen(
                         "zusatzbeitrag_z2": {
                             monat: z2
                         },
+                    },
+                },
+                "households": {
+                    "haushalt": {
+                        "adults": ["elternteil"],
+                        "children": ["kind"],
                     }
-                }
+                },
             },
         )
 
-        # ------------------------------------------
-        # 4. OpenFisca-Berechnung
-        # ------------------------------------------
+        # Personenindex nicht fest annehmen.
+        personen_ids = list(simulation.persons.ids)
+        kind_index = personen_ids.index("kind")
 
-        stundenbeitrag = simulation.calculate(
-            "gesamter_stundenbeitrag",
-            monat,
-        )[0]
+        def kind_wert(variable):
+            return simulation.calculate(
+                variable, monat
+            )[kind_index]
 
-        beitrag = simulation.calculate(
-            "beitrag_nach_kostenbegrenzung",
-            monat,
-        )[0]
-
-        stundenbeitrag = round(
-            float(stundenbeitrag), 2
+        einkommen_massgebend = float(
+            kind_wert("massgebendes_einkommen")
         )
 
-        beitrag = round(
-            float(beitrag), 2
+        anspruch = bool(
+            kind_wert("kibg_anspruchsberechtigt")
+        )
+
+        sonderantrag = bool(
+            kind_wert("kibg_sonderantrag_noetig")
+        )
+
+        stundenbeitrag = float(
+            kind_wert("gesamter_stundenbeitrag")
+        )
+
+        # Exakte Minuten statt gerundeter Kalenderstunden.
+        # Geldbetrag erst am Schluss auf Rappen runden.
+        beitrag = beitrag_aus_minuten(
+            minuten,
+            stundenbeitrag,
+        )
+
+        kosten = Decimal(str(betreuungskosten_pro_monat))
+
+        if kosten < 0:
+            raise ValueError(
+                "Betreuungskosten duerfen nicht negativ sein."
+            )
+
+        # Kostenbegrenzung und Anspruchspruefung.
+        beitrag = min(
+            max(beitrag, Decimal("0.00")),
+            kosten,
+        )
+
+        if not anspruch:
+            beitrag = Decimal("0.00")
+
+        beitrag = beitrag.quantize(
+            Decimal("0.01"),
+            rounding=ROUND_HALF_UP,
         )
 
         ergebnisse[monat] = {
-            "betreuungsstunden": stunden,
-            "stundenbeitrag": stundenbeitrag,
+            "betreuungsminuten": minuten,
+            "betreuungsstunden": round(minuten / 60, 2),
+            "massgebendes_einkommen": einkommen_massgebend,
+            "anspruchsberechtigt": anspruch,
+            "sonderantrag_noetig": sonderantrag,
+            "stundenbeitrag": round(stundenbeitrag, 2),
             "betreuungskosten": betreuungskosten_pro_monat,
-            "kibg_beitrag": beitrag,
+            "kibg_beitrag": float(beitrag),
         }
 
         gesamtbeitrag += beitrag
@@ -149,75 +206,46 @@ def kibg_beitraege_berechnen(
         "von": von,
         "bis": bis,
         "monate": ergebnisse,
-        "gesamtstunden": kalender["gesamtstunden"],
-        "gesamtbeitrag": round(
-            gesamtbeitrag, 2
+        "gesamtminuten": sum(monatsminuten.values()),
+        "gesamtstunden": round(
+            sum(monatsminuten.values()) / 60, 2
         ),
+        "gesamtbeitrag": float(gesamtbeitrag),
     }
 
 
-# ==================================================
-# BEISPIEL
-# ==================================================
-
 if __name__ == "__main__":
-
     ergebnis = kibg_beitraege_berechnen(
-        von="2026-11-01",
-        bis="2027-10-31",
-
+        von="2026-11-02",
+        bis="2026-11-06",
         wochenplan={
-            "Montag": {
-                "von": "06:00",
-                "bis": "18:00",
-            },
-            "Dienstag": {
-                "von": "06:00",
-                "bis": "18:00",
-            },
-            "Mittwoch": {
-                "von": "06:00",
-                "bis": "18:00",
-            },
-            "Donnerstag": {
-                "von": "06:00",
-                "bis": "18:00",
-            },
-            "Freitag": {
-                "von": "06:00",
-                "bis": "18:00",
-            },
+            tag: {"von": "07:13", "bis": "17:48"}
+            for tag in [
+                "Montag",
+                "Dienstag",
+                "Mittwoch",
+                "Donnerstag",
+                "Freitag",
+            ]
         },
-
-        einkommen=70000,
+        einkommen=74000,
         alter_in_monaten=24,
         betreuungsart="kita",
-
         betreuungskosten_pro_monat=1800,
-
+        beschaeftigungsgrad=80,
         z1=1.50,
         z2=0.50,
-
-        ferien=[
-            {
-                "von": "2026-12-21",
-                "bis": "2027-01-03",
-            },
-        ],
     )
-
-    print("\nKiBG BEITRAGSBERECHNUNG")
-    print("=" * 55)
 
     for monat, daten in ergebnis["monate"].items():
+        print(f"\nMonat: {monat}")
+        print("Minuten:", daten["betreuungsminuten"])
         print(
-            f"{monat}: "
-            f"{daten['betreuungsstunden']} Stunden | "
-            f"CHF {daten['kibg_beitrag']:.2f}"
+            "Massgebendes Einkommen:",
+            daten["massgebendes_einkommen"],
         )
+        print("Anspruch:", daten["anspruchsberechtigt"])
+        print("Sonderantrag:", daten["sonderantrag_noetig"])
+        print("KiBG-Beitrag: CHF", daten["kibg_beitrag"])
 
-    print("=" * 55)
-    print(
-        "Gesamtbeitrag: CHF",
-        f"{ergebnis['gesamtbeitrag']:.2f}",
-    )
+    print("\nGesamtbeitrag: CHF", ergebnis["gesamtbeitrag"])
