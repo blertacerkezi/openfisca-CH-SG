@@ -111,6 +111,54 @@ function dateRange(von: string, bis: string) {
   return dates;
 }
 
+const MAX_HOURS = 12;
+const MAX_DAYS_PER_WEEK = 5;
+
+function activeCare(care: DayCare | undefined): boolean {
+  return Boolean(
+    care &&
+    !care.elternferien &&
+    care.obhut &&
+    care.hours > 0
+  );
+}
+
+function mondayKey(date: string): string {
+  const monday = parseDate(date);
+  monday.setDate(
+    monday.getDate() - ((monday.getDay() + 6) % 7)
+  );
+  return dateKey(monday);
+}
+
+function validateCareDays(
+  days: Record<string, DayCare>
+): string | null {
+  const counts = new Map<string, number>();
+
+  for (const [date, care] of Object.entries(days)) {
+    if (!activeCare(care)) continue;
+
+    if (
+      !Number.isFinite(care.hours) ||
+      care.hours > MAX_HOURS
+    ) {
+      return `Am ${date} sind höchstens 12 Betreuungsstunden zulässig.`;
+    }
+
+    const week = mondayKey(date);
+    const count = (counts.get(week) ?? 0) + 1;
+
+    if (count > MAX_DAYS_PER_WEEK) {
+      return `In der Woche ab ${week} sind höchstens 5 Betreuungstage zulässig.`;
+    }
+
+    counts.set(week, count);
+  }
+
+  return null;
+}
+
 export function CareCalendar({
   children,
   onChange,
@@ -215,25 +263,44 @@ export function CareCalendar({
     date: string,
     next: DayCare | null,
   ) {
+    if (
+      next !== null &&
+      (
+        !Number.isFinite(next.hours) ||
+        next.hours < 0 ||
+        next.hours > MAX_HOURS
+      )
+    ) {
+      alert(
+        "Gemäss Art. 14 Abs. 4 KiBV sind höchstens " +
+        "12 subventionierte Betreuungsstunden pro Tag zulässig."
+      );
+      return;
+    }
+
+    const days = { ...child.days };
+
+    if (next === null) {
+      delete days[date];
+    } else {
+      days[date] = next;
+    }
+
+    const error = validateCareDays(days);
+
+    if (error) {
+      alert(
+        `${error} Rechtsgrundlage: Art. 14 Abs. 4 KiBV.`
+      );
+      return;
+    }
+
     onChange(
-      children.map((item) => {
-        if (item.id !== child.id) {
-          return item;
-        }
-
-        const days = { ...item.days };
-
-        if (next === null) {
-          delete days[date];
-        } else {
-          days[date] = next;
-        }
-
-        return {
-          ...item,
-          days,
-        };
-      }),
+      children.map((item) =>
+        item.id === child.id
+          ? { ...item, days }
+          : item
+      )
     );
   }
 
@@ -363,8 +430,7 @@ export function CareCalendar({
       return;
     }
 
-    onChange(
-      children.map((item) => {
+    const updatedChildren = children.map((item) => {
         if (item.id !== child.id) {
           return item;
         }
@@ -432,12 +498,48 @@ export function CareCalendar({
           ...item,
           days,
         };
-      }),
+      });
+
+    const updatedChild = updatedChildren.find(
+      (item) => item.id === child.id
     );
+
+    const error = updatedChild
+      ? validateCareDays(updatedChild.days)
+      : null;
+
+    if (error) {
+      alert(
+        `Wochenmuster nicht übertragen: ${error} ` +
+        "Rechtsgrundlage: Art. 14 Abs. 4 KiBV."
+      );
+      return;
+    }
+
+    onChange(updatedChildren);
   }
 
   return (
     <div className="flex flex-col gap-4">
+      <div className="rounded-card border border-line bg-sand p-4 text-sm">
+        <p className="font-medium text-ink">
+          Gesetzliche Begrenzung der subventionierten Betreuung
+        </p>
+
+        <p className="mt-2 text-muted">
+          Pro Kind können höchstens 12 Betreuungsstunden
+          pro Tag und höchstens 5 Betreuungstage pro Woche
+          berücksichtigt werden.
+          Rechtsgrundlage: Art. 14 Abs. 4 KiBV.
+        </p>
+
+        <p className="mt-1 text-muted">
+          Diese Grenzen betreffen die subventionierbare
+          Betreuung, nicht zwingend die tatsächlich
+          genutzte Betreuung.
+        </p>
+      </div>
+
       {/* Kind auswählen */}
       <div className="flex flex-wrap gap-2">
         {children.map((item, index) => (
@@ -663,7 +765,8 @@ export function CareCalendar({
           </label>
 
           <label className="mt-2 block text-sm text-muted">
-            Stunden
+            Subventionierbare Betreuungsstunden
+            (max. 12 pro Tag)
 
             <input
               type="number"
@@ -679,16 +782,29 @@ export function CareCalendar({
                   event.currentTarget.select();
                 }
               }}
-              onChange={(event) =>
+              onChange={(event) => {
+                const raw = event.currentTarget.value;
+                const hours = raw === "" ? 0 : Number(raw);
+
+                if (
+                  !Number.isFinite(hours) ||
+                  hours < 0 ||
+                  hours > MAX_HOURS
+                ) {
+                  alert(
+                    "Maximal 12 Stunden pro Tag gemäss " +
+                    "Art. 14 Abs. 4 KiBV."
+                  );
+                  return;
+                }
+
                 patch(picked, {
                   obhut: draft?.obhut ?? true,
                   type: draft?.type ?? "kita",
-                  hours: Number(
-                    event.target.value,
-                  ),
+                  hours,
                   elternferien: false,
-                })
-              }
+                });
+              }}
               className="mt-1 min-h-11 w-full rounded-card border border-line bg-card px-3"
             />
           </label>
