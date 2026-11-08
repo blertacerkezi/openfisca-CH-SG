@@ -25,6 +25,8 @@ export type DayCare = {
 export type ChildInput = {
   id: string;
   name: string;
+  firstName?: string;
+  lastName?: string;
   birth: string;
   einschulung: string;
   primarEnde: string;
@@ -105,6 +107,25 @@ export function ageMonths(birth: string, ref = REF) {
   return months;
 }
 
+/**
+ * Ein Kind unter 3 vollendeten Monaten wird
+ * im aktuellen Rechenmodell nicht berücksichtigt.
+ *
+ * Massgebend ist der Berechnungsstichtag REF.
+ */
+export function isChildTooYoung(
+  child: ChildInput,
+  ref = REF,
+): boolean {
+  if (!child.birth) return false;
+
+  const date = new Date(child.birth + "T00:00:00");
+
+  if (Number.isNaN(date.getTime())) return false;
+
+  return ageMonths(child.birth, ref) < 3;
+}
+
 export function isEnrolled(child: ChildInput, ref = REF) {
   if (!child.einschulung) return false;
   const d = new Date(child.einschulung + "T00:00:00");
@@ -167,7 +188,11 @@ export function exceptionGranted(
     h.integration2 ||
     h.belastung1 ||
     h.belastung2 ||
-    children.some((child) => child.kindlicheIndikation)
+    children.some(
+      (child) =>
+        !isChildTooYoung(child) &&
+        child.kindlicheIndikation
+    )
   );
 }
 
@@ -319,6 +344,21 @@ export function assess(
     const months = ageMonths(child.birth);
     const enrolled = isEnrolled(child);
     const finished = primaryFinished(child);
+
+    if (isChildTooYoung(child)) {
+      return {
+        id: child.id,
+        name: child.name,
+        months,
+        enrolled: false,
+        finished: false,
+        hours: 0,
+        eligible: false,
+        reason: "Unter 3 Monaten – nicht berücksichtigt",
+        subsidy: 0,
+        hypothetical: 0,
+      };
+    }
 
     let hours = 0;
     let hypothetical = 0;
