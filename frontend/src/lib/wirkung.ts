@@ -12,7 +12,19 @@ export type HebelWahl = {
   abzugAb: number | null;
   kitaSatz: number | null;
   schuleSatz: number | null;
+  pensumPaar: number | null;
+  pensumAllein: number | null;
 };
+
+export const GESETZ = {
+  band: 154_000,
+  abzugAb: 40_000,
+  kitaSatz: 7.5,
+  schuleSatz: 5.5,
+  pensumPaar: 120,
+  pensumAllein: 20,
+  jeKind: 0,
+} as const;
 
 export type Modell = {
   erwachsene: 1 | 2;
@@ -21,6 +33,7 @@ export type Modell = {
   bisher: number;
   neu: number;
   partnerPensum: number;
+  pensum1: number;
   band: number;
   abzugAb: number;
   kitaSatz: number;
@@ -39,6 +52,8 @@ export type Variante = {
   quote: number;
   band: number;
   abzugAb: number;
+  anspruch: boolean;
+  pensumSoll: number;
 };
 
 export type Wirkung = {
@@ -92,24 +107,24 @@ function variante(
     (kitaKinder * STUNDEN_KITA * kitaSatz + m.schulkinder * STUNDEN_SCHULE * schuleSatz) *
     tage *
     faktor;
-  const anspruch = pensumOk(m);
+  const pensumSoll = sollVon(m, useHebel);
+  const anspruch = pensumIst(m) + 1e-9 >= pensumSoll;
   const beitrag = anspruch ? Math.min(kosten, round(roh)) : 0;
   const bleibt = mehrlohn - kosten + beitrag;
-  return { faktor, beitrag, bleibt, quote: quoteOf(mehrlohn, bleibt), band, abzugAb };
+  return { faktor, beitrag, bleibt, quote: quoteOf(mehrlohn, bleibt), band, abzugAb, anspruch, pensumSoll };
 }
 
-function pensumOk(m: Modell) {
-  return pensumIst(m) + 1e-9 >= pensumSoll(m);
+function sollVon(m: Modell, useHebel: boolean) {
+  if (m.erwachsene === 2) {
+    return useHebel && m.hebel.pensumPaar != null ? m.hebel.pensumPaar : m.pensumPaar;
+  }
+  return useHebel && m.hebel.pensumAllein != null ? m.hebel.pensumAllein : m.pensumAllein;
 }
 
 function pensumIst(m: Modell) {
-  const eigene = m.neu * 20;
+  const eigene = m.pensum1;
   const partner = m.erwachsene === 2 ? m.partnerPensum : 0;
   return eigene + partner;
-}
-
-function pensumSoll(m: Modell) {
-  return m.erwachsene === 2 ? m.pensumPaar : m.pensumAllein;
 }
 
 function hebelNamen(m: Modell) {
@@ -119,6 +134,8 @@ function hebelNamen(m: Modell) {
   if (m.hebel.abzugAb != null && m.hebel.abzugAb !== m.abzugAb) names.push("Abzug beginnt später");
   if (m.hebel.kitaSatz != null && m.hebel.kitaSatz !== m.kitaSatz) names.push("Kita-Ansatz");
   if (m.hebel.schuleSatz != null && m.hebel.schuleSatz !== m.schuleSatz) names.push("Schulkind-Ansatz");
+  if (m.hebel.pensumPaar != null && m.hebel.pensumPaar !== m.pensumPaar) names.push("Pensum Paar");
+  if (m.hebel.pensumAllein != null && m.hebel.pensumAllein !== m.pensumAllein) names.push("Pensum Allein");
   return names;
 }
 
@@ -129,7 +146,18 @@ export function wirken(m: Modell): Wirkung {
   const stunden = (kitaKinder * STUNDEN_KITA + m.schulkinder * STUNDEN_SCHULE) * monatTage;
   const mehrlohn = round(monatTage * TAGESLOHN);
   const kosten = round(stunden * m.tarif);
-  const base = { ...m, hebel: { band: null, jeKind: null, abzugAb: null, kitaSatz: null, schuleSatz: null } };
+  const base = {
+    ...m,
+    hebel: {
+      band: null,
+      jeKind: null,
+      abzugAb: null,
+      kitaSatz: null,
+      schuleSatz: null,
+      pensumPaar: null,
+      pensumAllein: null,
+    },
+  };
   const ohne = variante(base, mehrlohn, kosten, false);
   ohne.beitrag = 0;
   ohne.bleibt = mehrlohn - kosten;
@@ -145,9 +173,9 @@ export function wirken(m: Modell): Wirkung {
     mehrlohn,
     kosten,
     stunden: round(stunden),
-    anspruch: pensumOk(m),
+    anspruch: gesetz.anspruch,
     pensumIst: pensumIst(m),
-    pensumSoll: pensumSoll(m),
+    pensumSoll: gesetz.pensumSoll,
     ohne,
     gesetz,
     hebel,

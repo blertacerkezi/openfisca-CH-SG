@@ -10,6 +10,7 @@ import {
 } from "recharts";
 import { chf } from "@/lib/kibg";
 import {
+  GESETZ,
   STUNDEN_KITA,
   STUNDEN_SCHULE,
   TAGESLOHN,
@@ -25,13 +26,9 @@ type Punkt = {
   name: string;
 };
 
-const emptyHebel = (): HebelWahl => ({
-  band: null,
-  jeKind: null,
-  abzugAb: null,
-  kitaSatz: null,
-  schuleSatz: null,
-});
+function nurHebel(wert: number, gesetz: number) {
+  return Math.abs(wert - gesetz) < 1e-6 ? null : wert;
+}
 
 export function Overview({ onBack }: { onBack: () => void }) {
   const [erwachsene, setErwachsene] = useState<1 | 2>(2);
@@ -40,15 +37,26 @@ export function Overview({ onBack }: { onBack: () => void }) {
   const [bisher, setBisher] = useState(0);
   const [neu, setNeu] = useState(1);
   const [partnerPensum, setPartnerPensum] = useState(100);
+  const [pensum1, setPensum1] = useState(20);
   const [einkommen, setEinkommen] = useState(90_000);
-  const [band, setBand] = useState(154_000);
-  const [abzugAb, setAbzugAb] = useState(40_000);
-  const [kitaSatz, setKitaSatz] = useState(7.5);
-  const [schuleSatz, setSchuleSatz] = useState(5.5);
-  const [pensumPaar, setPensumPaar] = useState(120);
-  const [pensumAllein, setPensumAllein] = useState(20);
+  const [band, setBand] = useState<number>(GESETZ.band);
+  const [abzugAb, setAbzugAb] = useState<number>(GESETZ.abzugAb);
+  const [kitaSatz, setKitaSatz] = useState<number>(GESETZ.kitaSatz);
+  const [schuleSatz, setSchuleSatz] = useState<number>(GESETZ.schuleSatz);
+  const [pensumPaar, setPensumPaar] = useState<number>(GESETZ.pensumPaar);
+  const [pensumAllein, setPensumAllein] = useState<number>(GESETZ.pensumAllein);
+  const [jeKind, setJeKind] = useState<number>(GESETZ.jeKind);
   const [tarif, setTarif] = useState(12);
-  const [hebel, setHebel] = useState<HebelWahl>({ ...emptyHebel(), band: 200_000 });
+
+  const hebel: HebelWahl = {
+    band: nurHebel(band, GESETZ.band),
+    jeKind: nurHebel(jeKind, GESETZ.jeKind),
+    abzugAb: nurHebel(abzugAb, GESETZ.abzugAb),
+    kitaSatz: nurHebel(kitaSatz, GESETZ.kitaSatz),
+    schuleSatz: nurHebel(schuleSatz, GESETZ.schuleSatz),
+    pensumPaar: nurHebel(pensumPaar, GESETZ.pensumPaar),
+    pensumAllein: nurHebel(pensumAllein, GESETZ.pensumAllein),
+  };
 
   const modell: Modell = {
     erwachsene,
@@ -57,12 +65,13 @@ export function Overview({ onBack }: { onBack: () => void }) {
     bisher,
     neu,
     partnerPensum,
-    band,
-    abzugAb,
-    kitaSatz,
-    schuleSatz,
-    pensumPaar,
-    pensumAllein,
+    pensum1,
+    band: GESETZ.band,
+    abzugAb: GESETZ.abzugAb,
+    kitaSatz: GESETZ.kitaSatz,
+    schuleSatz: GESETZ.schuleSatz,
+    pensumPaar: GESETZ.pensumPaar,
+    pensumAllein: GESETZ.pensumAllein,
     einkommen,
     tarif,
     hebel,
@@ -96,27 +105,27 @@ export function Overview({ onBack }: { onBack: () => void }) {
   }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-6xl flex-col gap-4 px-4 py-4 lg:px-6">
-      <header className="flex flex-wrap items-center justify-between gap-3">
+    <main className="flex min-h-screen flex-col gap-3 py-3">
+      <header className="flex flex-wrap items-center justify-between gap-3 px-4">
         <button type="button" onClick={onBack} className="min-h-11 text-pine">
           Zur Auswahl
         </button>
         <p className="text-sm text-muted">Modellrechnung, kein Gesuchsentscheid</p>
       </header>
 
-      <div className="grid gap-4 lg:grid-cols-12">
-        <section className="order-3 flex flex-col gap-5 rounded-card border border-line bg-card p-4 lg:col-span-5 xl:order-1 xl:col-span-3 xl:max-h-screen xl:overflow-y-auto">
+      <div className="grid flex-1 items-stretch gap-3 xl:grid-cols-[minmax(22rem,1.15fr)_minmax(28rem,1.3fr)_minmax(22rem,1.15fr)]">
+        <section className="order-3 flex h-full flex-col gap-5 rounded-card border border-line bg-card p-5 xl:order-1">
           <h2 className="font-serif text-2xl">Regeln</h2>
 
           <Group title="Haushalt">
-            <Range
-              label="Allein oder Paar"
-              min={1}
-              max={2}
-              step={1}
+            <Switch
+              label="Haushalt"
               value={erwachsene}
-              format={(n) => (n === 1 ? "Allein" : "Paar")}
-              onChange={(n) => setErwachsene(n === 1 ? 1 : 2)}
+              onChange={setErwachsene}
+              options={[
+                { value: 1, label: "Allein" },
+                { value: 2, label: "Paar" },
+              ]}
             />
             <Range
               label="Anzahl Kinder"
@@ -139,10 +148,20 @@ export function Overview({ onBack }: { onBack: () => void }) {
               format={(n) => String(n)}
               onChange={setSchulkinder}
             />
+            <Range
+              label="Pensum Person 1"
+              hint="Die Person, die den Schritt macht"
+              min={0}
+              max={100}
+              step={10}
+              value={pensum1}
+              format={(n) => `${n} %`}
+              onChange={setPensum1}
+            />
             {erwachsene === 2 && (
               <Range
-                label="Pensum der anderen Person"
-                hint="Gesetz · zusammen mit dem eigenen Pensum"
+                label="Pensum Person 2"
+                hint="Zusammen mit Person 1"
                 min={0}
                 max={100}
                 step={10}
@@ -203,63 +222,74 @@ export function Overview({ onBack }: { onBack: () => void }) {
           </Group>
 
           <Group title="Gesetz und Verordnung">
-            <Range
+            <p className="text-xs text-muted">Strich = geltendes Gesetz. Wegschieben gilt als Hebel. Das Gesetz bleibt.</p>
+            <MarkedRange
               label="Einkommensband bis"
-              hint="Verordnung"
               min={80_000}
               max={250_000}
               step={2_000}
               value={band}
+              gesetz={GESETZ.band}
               format={chf}
               onChange={setBand}
             />
-            <Range
+            <MarkedRange
+              label="Zuschlag je Kind aufs Band"
+              min={0}
+              max={40_000}
+              step={2_000}
+              value={jeKind}
+              gesetz={GESETZ.jeKind}
+              format={(n) => (n === 0 ? "keiner" : `+${chf(n)}`)}
+              onChange={setJeKind}
+            />
+            <MarkedRange
               label="Voller Satz bis"
-              hint="Verordnung · darunter bleibt der Faktor 100 %"
               min={0}
               max={100_000}
               step={2_000}
               value={abzugAb}
+              gesetz={GESETZ.abzugAb}
               format={chf}
               onChange={setAbzugAb}
             />
-            <Range
+            <MarkedRange
               label="Kita ab 18 Monaten"
-              hint="Verordnung · Franken pro Stunde"
               min={0}
               max={15}
               step={0.5}
               value={kitaSatz}
+              gesetz={GESETZ.kitaSatz}
               format={frankenStunde}
               onChange={setKitaSatz}
             />
-            <Range
+            <MarkedRange
               label="Schulkind"
-              hint="Verordnung · Franken pro Stunde"
               min={0}
               max={15}
               step={0.5}
               value={schuleSatz}
+              gesetz={GESETZ.schuleSatz}
               format={frankenStunde}
               onChange={setSchuleSatz}
             />
-            <Range
+            <MarkedRange
               label="Pensum Paar, Minimum"
-              hint="Gesetz"
               min={80}
               max={200}
               step={10}
               value={pensumPaar}
+              gesetz={GESETZ.pensumPaar}
               format={(n) => `${n} %`}
               onChange={setPensumPaar}
             />
-            <Range
+            <MarkedRange
               label="Pensum Allein, Minimum"
-              hint="Gesetz"
               min={10}
               max={100}
               step={10}
               value={pensumAllein}
+              gesetz={GESETZ.pensumAllein}
               format={(n) => `${n} %`}
               onChange={setPensumAllein}
             />
@@ -277,57 +307,9 @@ export function Overview({ onBack }: { onBack: () => void }) {
               onChange={setTarif}
             />
           </Group>
-
-          <Group title="Hebel">
-            <Lever
-              label="Einkommensband"
-              value={hebel.band}
-              onChange={(bandWahl) => setHebel({ ...hebel, band: bandWahl })}
-              options={[170_000, 180_000, 200_000, 220_000, 250_000].map((n) => ({
-                value: n,
-                label: chf(n),
-              }))}
-            />
-            <Lever
-              label="Zuschlag je Kind aufs Band"
-              value={hebel.jeKind}
-              onChange={(jeKind) => setHebel({ ...hebel, jeKind })}
-              options={[10_000, 20_000, 30_000, 40_000].map((n) => ({
-                value: n,
-                label: `+${chf(n)}`,
-              }))}
-            />
-            <Lever
-              label="Voller Satz bis"
-              value={hebel.abzugAb}
-              onChange={(abzug) => setHebel({ ...hebel, abzugAb: abzug })}
-              options={[50_000, 60_000, 70_000, 80_000].map((n) => ({
-                value: n,
-                label: chf(n),
-              }))}
-            />
-            <Lever
-              label="Kita-Ansatz"
-              value={hebel.kitaSatz}
-              onChange={(satz) => setHebel({ ...hebel, kitaSatz: satz })}
-              options={[8, 8.5, 9.5, 11, 12].map((n) => ({
-                value: n,
-                label: frankenStunde(n),
-              }))}
-            />
-            <Lever
-              label="Schulkind-Ansatz"
-              value={hebel.schuleSatz}
-              onChange={(satz) => setHebel({ ...hebel, schuleSatz: satz })}
-              options={[6, 6.5, 7.5, 8.5, 10].map((n) => ({
-                value: n,
-                label: frankenStunde(n),
-              }))}
-            />
-          </Group>
         </section>
 
-        <section className="order-1 flex flex-col gap-4 rounded-card border border-line bg-card p-4 lg:col-span-7 xl:order-2 xl:col-span-6">
+        <section className="order-1 flex h-full flex-col gap-4 rounded-card border border-line bg-card p-5 xl:order-2">
           <p className="text-sm font-medium tracking-wide text-pine uppercase">Behaltquote</p>
           <div className="flex flex-wrap items-end gap-x-4 gap-y-1">
             <p className="font-serif text-6xl leading-none text-ink sm:text-7xl">{gezeigt.quote}</p>
@@ -340,7 +322,7 @@ export function Overview({ onBack }: { onBack: () => void }) {
           </div>
 
           <div className="flex flex-wrap gap-2 text-sm">
-            <span className="rounded-full bg-sand px-3 py-2">ohne Gesetz: {w.ohne.quote} von 100</span>
+            <span className="rounded-full bg-sand px-3 py-2">ohne Gesetz: {w.ohne.quote} %</span>
             <span className="rounded-full bg-pine px-3 py-2 text-pine-ink">
               Gesetz: {pkt(w.gesetz.quote - w.ohne.quote)} · {deltaFr(w.gesetz.beitrag)} / Mt.
             </span>
@@ -351,10 +333,10 @@ export function Overview({ onBack }: { onBack: () => void }) {
             </span>
           </div>
 
-          {!w.anspruch && (
+          {!gezeigt.anspruch && (
             <p className="rounded-card bg-clay-soft px-4 py-3 text-clay">
-              Pensum {w.pensumIst} % von nötigen {w.pensumSoll} %. Gesetz und Hebel zahlen in diesem
-              Schritt nichts.
+              Pensum {w.pensumIst} % von nötigen {gezeigt.pensumSoll} %. In dieser Variante zahlt der
+              Kanton nichts.
             </p>
           )}
 
@@ -387,12 +369,12 @@ export function Overview({ onBack }: { onBack: () => void }) {
                 <YAxis
                   dataKey="quote"
                   domain={[0, 100]}
-                  width={36}
+                  width={52}
                   stroke="var(--color-muted)"
-                  tickFormatter={(v: number) => `${v}`}
+                  tickFormatter={(v: number) => `${v} %`}
                 />
                 <Tooltip
-                  formatter={(value) => [`${Number(value ?? 0)} von 100`, "Bleibt"]}
+                  formatter={(value) => [`${Number(value ?? 0)} %`, "Bleibt"]}
                   labelFormatter={(v) => `Beitrag ${chf(Number(v))}`}
                 />
                 <Line
@@ -420,7 +402,7 @@ export function Overview({ onBack }: { onBack: () => void }) {
           </p>
         </section>
 
-        <section className="order-2 flex flex-col gap-4 rounded-card border border-line bg-card p-4 lg:col-span-12 xl:order-3 xl:col-span-3">
+        <section className="order-2 flex h-full flex-col gap-4 rounded-card border border-line bg-card p-5 xl:order-3">
           <div>
             <h2 className="font-serif text-2xl">Haushalt im Detail</h2>
             <p className="mt-1 text-sm text-muted">{haushalt}</p>
@@ -437,7 +419,7 @@ export function Overview({ onBack }: { onBack: () => void }) {
           <Row
             label={aktiv ? "Kanton mit Hebel" : "Kanton"}
             hint={
-              !w.anspruch
+              !gezeigt.anspruch
                 ? "Kein Anspruch, Pensum fehlt"
                 : aktiv
                   ? `Faktor ${Math.round(gezeigt.faktor * 100)} %. Das Gesetz allein wäre ${chf(w.gesetz.beitrag)}.`
@@ -449,7 +431,7 @@ export function Overview({ onBack }: { onBack: () => void }) {
           <div className="flex items-baseline justify-between gap-3 rounded-card bg-moss px-3 py-3">
             <div>
               <p className="font-medium">Bleibt im Haushalt</p>
-              <p className="text-sm text-muted">{gezeigt.quote} von 100 Fr. Lohn</p>
+              <p className="text-sm text-muted">{gezeigt.quote} %</p>
             </div>
             <p className="font-serif text-3xl text-ink">{chf(gezeigt.bleibt)}</p>
           </div>
@@ -459,16 +441,16 @@ export function Overview({ onBack }: { onBack: () => void }) {
             <div className="mt-2 flex flex-col gap-2">
               <Note title="Pensum zu hoch angegeben">
                 Fehlt das Pensum, zahlt der Kanton nichts. Es bleibt der Punkt ohne Gesetz:{" "}
-                {w.ohne.quote} von 100. Prüfbar am Arbeitsvertrag.
+                {w.ohne.quote} %. Prüfbar am Arbeitsvertrag.
               </Note>
               <Note title="Einkommen steigt, nicht gemeldet">
                 Ein Viertel mehr Einkommen senkt den Faktor auf {Math.round(w.einkommen25.faktor * 100)} %.
                 Beitrag dann {chf(w.einkommen25.beitrag)} statt {chf(gezeigt.beitrag)}, es bleiben{" "}
-                {w.einkommen25.quote} von 100.
+                {w.einkommen25.quote} %.
               </Note>
               <Note title="Mehr Betreuung als Arbeit">
                 Zwei zusätzliche Betreuungstage ohne mehr Lohn kosten {chf(w.extraBetreuung)} extra.
-                Von 100 Fr. bleiben dann {w.extraQuote}.
+                Dann bleiben {w.extraQuote} %.
               </Note>
             </div>
           </div>
@@ -517,6 +499,12 @@ function hebelTexte(m: Modell) {
   }
   if (m.hebel.schuleSatz != null && m.hebel.schuleSatz !== m.schuleSatz) {
     texte.push(`Schule ${frankenStunde(m.hebel.schuleSatz)}`);
+  }
+  if (m.hebel.pensumPaar != null && m.hebel.pensumPaar !== m.pensumPaar) {
+    texte.push(`Pensum Paar ${m.hebel.pensumPaar} %`);
+  }
+  if (m.hebel.pensumAllein != null && m.hebel.pensumAllein !== m.pensumAllein) {
+    texte.push(`Pensum Allein ${m.hebel.pensumAllein} %`);
   }
   return texte;
 }
@@ -586,32 +574,82 @@ function Range({
   );
 }
 
-function Lever({
+function Switch<T extends string | number>({
   label,
   value,
   options,
   onChange,
 }: {
   label: string;
-  value: number | null;
-  options: { value: number; label: string }[];
-  onChange: (value: number | null) => void;
+  value: T;
+  options: { value: T; label: string }[];
+  onChange: (value: T) => void;
 }) {
   return (
-    <label className="block text-sm">
-      <span className="font-medium">{label}</span>
-      <select
-        value={value == null ? "gesetz" : String(value)}
-        onChange={(e) => onChange(e.target.value === "gesetz" ? null : Number(e.target.value))}
-        className="mt-1 min-h-11 w-full rounded-card border border-line bg-card px-3"
-      >
-        <option value="gesetz">wie Gesetz</option>
+    <div>
+      <span className="text-sm font-medium">{label}</span>
+      <div className="mt-1 grid grid-cols-2 gap-1 rounded-card border border-line p-1">
         {options.map((option) => (
-          <option key={option.value} value={option.value}>
+          <button
+            key={String(option.value)}
+            type="button"
+            onClick={() => onChange(option.value)}
+            className={`min-h-11 rounded-card ${value === option.value ? "bg-pine text-pine-ink" : "text-ink"}`}
+          >
             {option.label}
-          </option>
+          </button>
         ))}
-      </select>
+      </div>
+    </div>
+  );
+}
+
+function MarkedRange({
+  label,
+  min,
+  max,
+  step,
+  value,
+  gesetz,
+  format,
+  onChange,
+}: {
+  label: string;
+  min: number;
+  max: number;
+  step: number;
+  value: number;
+  gesetz: number;
+  format: (n: number) => string;
+  onChange: (n: number) => void;
+}) {
+  const lage = Math.abs(value - gesetz) < 1e-6;
+  const pct = ((gesetz - min) / (max - min)) * 100;
+  return (
+    <label className="block">
+      <span className="flex items-baseline justify-between gap-3 text-sm">
+        <span className="font-medium">{label}</span>
+        <span>
+          {format(value)}
+          <span className={lage ? "text-pine" : "text-clay"}> · {lage ? "Gesetz" : "Hebel"}</span>
+        </span>
+      </span>
+      <span className="relative mt-2 block">
+        <input
+          type="range"
+          min={min}
+          max={max}
+          step={step}
+          value={value}
+          onChange={(e) => onChange(Number(e.target.value))}
+          className="relative z-10 w-full accent-pine"
+        />
+        <span
+          className="pointer-events-none absolute top-1/2 z-20 h-4 w-0.5 -translate-x-1/2 -translate-y-1/2 bg-ink"
+          style={{ left: `${pct}%` }}
+        />
+      </span>
+      <span className="mt-1 block text-xs text-muted">Gesetz {format(gesetz)}</span>
     </label>
   );
 }
@@ -677,7 +715,7 @@ function Marke({ cx, cy, payload }: { cx?: number; cy?: number; payload?: Punkt 
         y={below ? cy + 16 : cy - 10}
         className="fill-ink text-xs"
       >
-        {payload.name}: {payload.quote}
+        {payload.name}: {payload.quote} %
       </text>
     </g>
   );
