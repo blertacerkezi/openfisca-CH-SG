@@ -1,13 +1,22 @@
 
 export const REF = new Date(2026, 10, 1);
 export const TAX_YEAR = 2024;
+
 export const MIN_INCOME = 40_000;
 export const MAX_INCOME = 154_000;
 export const CHILD_DEDUCTION = 4_000;
+
 export const PENSUM_ALONE = 20;
 export const PENSUM_TOGETHER = 120;
 
-export type CareType = "kita" | "tagesfamilie" | "schulergaenzend";
+export const MAX_HOURS_PER_DAY = 12;
+export const MAX_DAYS_PER_WEEK = 5;
+
+export type CareType =
+  | "kita"
+  | "tagesfamilie"
+  | "schulergaenzend";
+
 export type TaxPath =
   | "ordentlich"
   | "quellen"
@@ -18,7 +27,6 @@ export type DayCare = {
   hours: number;
   type: CareType;
   obhut: boolean;
-  /** Elternferien: Das Kind wird zu Hause betreut. */
   elternferien?: boolean;
 };
 
@@ -30,6 +38,8 @@ export type ChildInput = {
   birth: string;
   einschulung: string;
   primarEnde: string;
+  eingeschult?: boolean | null;
+  primarAbgeschlossen?: boolean | null;
   kindlicheIndikation: boolean;
   days: Record<string, DayCare>;
 };
@@ -96,93 +106,206 @@ export const emptyIncome = (): IncomeInput => ({
   aktuellBekannt: false,
 });
 
-export function ageMonths(birth: string, ref = REF) {
-  if (!birth) return 0;
-  const b = new Date(birth + "T00:00:00");
-  if (Number.isNaN(b.getTime())) return 0;
+function parseDate(value: string): Date | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return null;
+  }
+
+  const date = new Date(value + "T00:00:00");
+
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  const normalized = [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0"),
+  ].join("-");
+
+  return normalized === value ? date : null;
+}
+
+export function ageMonths(
+  birth: string,
+  ref = REF,
+): number {
+  const date = parseDate(birth);
+
+  if (!date) return 0;
+
   let months =
-    (ref.getFullYear() - b.getFullYear()) * 12 +
-    (ref.getMonth() - b.getMonth());
-  if (ref.getDate() < b.getDate()) months -= 1;
+    (ref.getFullYear() - date.getFullYear()) * 12 +
+    (ref.getMonth() - date.getMonth());
+
+  if (ref.getDate() < date.getDate()) {
+    months -= 1;
+  }
+
   return months;
 }
 
-/**
- * Ein Kind unter 3 vollendeten Monaten wird
- * im aktuellen Rechenmodell nicht berücksichtigt.
- *
- * Massgebend ist der Berechnungsstichtag REF.
- */
 export function isChildTooYoung(
   child: ChildInput,
   ref = REF,
 ): boolean {
-  if (!child.birth) return false;
-
-  const date = new Date(child.birth + "T00:00:00");
-
-  if (Number.isNaN(date.getTime())) return false;
+  if (!parseDate(child.birth)) return false;
 
   return ageMonths(child.birth, ref) < 3;
 }
 
-export function isEnrolled(child: ChildInput, ref = REF) {
-  if (!child.einschulung) return false;
-  const d = new Date(child.einschulung + "T00:00:00");
-  return d.getTime() <= ref.getTime();
+export function isEnrolled(
+  child: ChildInput,
+  ref = REF,
+): boolean {
+  const date = parseDate(child.einschulung);
+
+  return date !== null && date.getTime() <= ref.getTime();
 }
 
-export function primaryFinished(child: ChildInput, ref = REF) {
-  if (!child.primarEnde) return false;
-  const d = new Date(child.primarEnde + "T00:00:00");
-  return d.getTime() <= ref.getTime();
+export function primaryFinished(
+  child: ChildInput,
+  ref = REF,
+): boolean {
+  const date = parseDate(child.primarEnde);
+
+  return date !== null && date.getTime() <= ref.getTime();
+}
+
+export function childWithinSchoolAge(
+  child: ChildInput,
+  ref = REF,
+): boolean {
+  return (
+    !isChildTooYoung(child, ref) &&
+    !primaryFinished(child, ref)
+  );
 }
 
 export function maxHourly(
   type: CareType,
   months: number,
   enrolled: boolean,
-) {
-  if (type === "schulergaenzend") return enrolled ? 5.5 : 0;
+): number {
+  if (type === "schulergaenzend") {
+    return enrolled ? 5.5 : 0;
+  }
+
   if (type === "kita") {
     if (enrolled || months >= 18) return 7.5;
     return 11;
   }
+
   if (enrolled || months >= 18) return 5.5;
+
   return 8.3;
 }
 
-export function partnerCountsForIncome(h: HouseholdInput) {
-  if (h.zusammen === "gemeinsam") return h.erwerb === "beide";
-  if (h.getrenntArt === "ehe") return true;
-  if (h.getrenntArt === "konkubinat") return h.konkubinatJahre >= 2;
+/**
+ * Einkommensberechnung:
+ * Im gemeinsamen Haushalt werden beide Personen
+ * berücksichtigt, unabhängig davon, wer arbeitet.
+ */
+export function partnerCountsForIncome(
+  h: HouseholdInput,
+): boolean {
+  if (h.zusammen === "gemeinsam") {
+    return true;
+  }
+
+  if (h.zusammen === "getrennt") {
+    // Bisherige Einkommensregeln des Projektmodells.
+    if (h.getrenntArt === "ehe") return true;
+
+    if (h.getrenntArt === "konkubinat") {
+      return h.konkubinatJahre >= 2;
+    }
+  }
+
   return false;
 }
 
-export function ebCount(h: HouseholdInput) {
+/**
+ * Anzahl der für die Pensumsprüfung
+ * berücksichtigten Personen.
+ *
+ * Gemeinsamer Haushalt: 2 Personen
+ * Getrennter Haushalt: 1 Person
+ *
+ * Diese Unterscheidung entspricht der vom
+ * Projekt gewünschten Modellregel.
+ */
+export function ebCount(
+  h: HouseholdInput,
+): number {
   if (h.zusammen === "gemeinsam") {
-    return h.erwerb === "beide" ? 2 : 1;
+    return 2;
   }
-  if (h.getrenntArt === "ehe") return 2;
-  if (
-    h.getrenntArt === "konkubinat" &&
-    h.partnerErziehungsberechtigt
-  ) return 2;
-  return 1;
+
+  if (h.zusammen === "getrennt") {
+    return 1;
+  }
+
+  return 0;
 }
 
-export function thresholdMet(h: HouseholdInput) {
-  const n = ebCount(h);
-  const sum = n === 1 ? h.pensum1 : h.pensum1 + h.pensum2;
-  return n === 1
-    ? sum >= PENSUM_ALONE
-    : sum >= PENSUM_TOGETHER;
+/**
+ * Gemeinsamer Haushalt:
+ * mindestens 120 % zusammen.
+ *
+ * Getrennter Haushalt:
+ * mindestens 20 %.
+ */
+export function thresholdMet(
+  h: HouseholdInput,
+): boolean {
+  if (h.zusammen === "gemeinsam") {
+    const pensum1 = h.pensum1;
+    const pensum2 =
+      h.erwerb === "beide" ? h.pensum2 : 0;
+
+    if (
+      !Number.isFinite(pensum1) ||
+      !Number.isFinite(pensum2)
+    ) {
+      return false;
+    }
+
+    if (
+      pensum1 < 0 ||
+      pensum1 > 100 ||
+      pensum2 < 0 ||
+      pensum2 > 100
+    ) {
+      return false;
+    }
+
+    return (
+      pensum1 + pensum2 >= PENSUM_TOGETHER
+    );
+  }
+
+  if (h.zusammen === "getrennt") {
+    return (
+      Number.isFinite(h.pensum1) &&
+      h.pensum1 >= PENSUM_ALONE &&
+      h.pensum1 <= 100
+    );
+  }
+
+  return false;
 }
 
+/**
+ * Ein Ausnahmegrund kann eine Prüfung
+ * durch den Kanton ermöglichen.
+ *
+ * Er ist aber noch keine Bewilligung.
+ */
 export function exceptionGranted(
   h: HouseholdInput,
   children: ChildInput[],
-) {
+): boolean {
   return (
     h.integration1 ||
     h.integration2 ||
@@ -190,34 +313,44 @@ export function exceptionGranted(
     h.belastung2 ||
     children.some(
       (child) =>
-        !isChildTooYoung(child) &&
+        childWithinSchoolAge(child) &&
         child.kindlicheIndikation
     )
   );
 }
 
+/**
+ * Nur das reguläre Pensum gilt als erfüllt.
+ * Eine allfällige Ausnahme wird separat geprüft.
+ */
 export function pensumMet(
   h: HouseholdInput,
-  children: ChildInput[] = [],
-) {
-  return thresholdMet(h) || exceptionGranted(h, children);
+  _children: ChildInput[] = [],
+): boolean {
+  return thresholdMet(h);
 }
 
-export function needsDeclaration(h: HouseholdInput) {
+export function needsDeclaration(
+  h: HouseholdInput,
+): boolean {
   return (
     h.taxPath === "nicht-rechtskraeftig" ||
     h.taxPath === "keine-veranlagung"
   );
 }
 
-export function needsMeldung(h: HouseholdInput) {
+export function needsMeldung(
+  h: HouseholdInput,
+): boolean {
   return (
     (h.wohnsitz === true && !thresholdMet(h)) ||
     needsDeclaration(h)
   );
 }
 
-function ordinaryPerson(p: IncomeInput) {
+function ordinaryPerson(
+  p: IncomeInput,
+): number {
   return (
     p.reineinkommen +
     0.2 * p.vermoegen +
@@ -233,13 +366,22 @@ function ordinaryPerson(p: IncomeInput) {
   );
 }
 
-function evidencePerson(p: IncomeInput) {
-  return p.reineinkommen + 0.2 * p.vermoegen;
+function evidencePerson(
+  p: IncomeInput,
+): number {
+  return (
+    p.reineinkommen +
+    0.2 * p.vermoegen
+  );
 }
 
-function quellenPerson(p: IncomeInput) {
+function quellenPerson(
+  p: IncomeInput,
+): number {
   const base =
-    (p.bruttoQuellen + p.bruttolohnEinfach) * 0.75;
+    (p.bruttoQuellen + p.bruttolohnEinfach) *
+    0.75;
+
   return p.grenzgaenger
     ? base * (p.kaufkraft || 1)
     : base;
@@ -248,9 +390,15 @@ function quellenPerson(p: IncomeInput) {
 export function personFromTax(
   p: IncomeInput,
   path: TaxPath,
-) {
-  if (path === "quellen") return quellenPerson(p);
-  if (path === "keine-veranlagung") return evidencePerson(p);
+): number {
+  if (path === "quellen") {
+    return quellenPerson(p);
+  }
+
+  if (path === "keine-veranlagung") {
+    return evidencePerson(p);
+  }
+
   return ordinaryPerson(p);
 }
 
@@ -281,21 +429,41 @@ export type Result = {
   hypothetical: number;
 };
 
+function weekKey(date: Date): string {
+  const monday = new Date(date);
+
+  monday.setDate(
+    monday.getDate() -
+      ((monday.getDay() + 6) % 7)
+  );
+
+  return [
+    monday.getFullYear(),
+    monday.getMonth(),
+    monday.getDate(),
+  ].join("-");
+}
+
 export function assess(
   h: HouseholdInput,
   children: ChildInput[],
   incomeOverride?: number,
 ): Result {
   const path = h.taxPath ?? "ordentlich";
-  const includePartner = partnerCountsForIncome(h);
+
+  const includePartner =
+    partnerCountsForIncome(h);
+
   const persons = includePartner
     ? [h.income1, h.income2]
     : [h.income1];
 
   const taxIncomeRaw = persons.reduce(
-    (s, p) => s + personFromTax(p, path),
+    (sum, person) =>
+      sum + personFromTax(person, path),
     0,
   );
+
   const deduction =
     path === "quellen"
       ? 0
@@ -307,37 +475,53 @@ export function assess(
   );
 
   const aktuell = persons.reduce(
-    (s, p) => s + (p.aktuellBekannt ? p.aktuell : 0),
+    (sum, person) =>
+      sum +
+      (person.aktuellBekannt
+        ? person.aktuell
+        : 0),
     0,
   );
+
   const bekannt = persons.some(
-    (p) => p.aktuellBekannt,
+    (person) => person.aktuellBekannt,
   );
+
   const deviation =
     taxIncome === 0
-      ? aktuell !== 0 ? 1 : 0
-      : Math.abs(aktuell - taxIncome) / taxIncome;
+      ? aktuell !== 0
+        ? 1
+        : 0
+      : Math.abs(aktuell - taxIncome) /
+        taxIncome;
 
-  const usedCurrent = bekannt && deviation >= 0.25;
+  const usedCurrent =
+    bekannt && deviation >= 0.25;
+
   const base =
     incomeOverride ??
-    (usedCurrent ? Math.max(0, aktuell) : taxIncome);
+    (usedCurrent
+      ? Math.max(0, aktuell)
+      : taxIncome);
 
   const faktor = Math.min(
     1,
     Math.max(
       0,
-      (MAX_INCOME - base) / (MAX_INCOME - MIN_INCOME),
+      (MAX_INCOME - base) /
+        (MAX_INCOME - MIN_INCOME),
     ),
   );
 
   const eb = ebCount(h);
+
   const pensumOk =
-    h.wohnsitz === true && pensumMet(h, children);
+    h.wohnsitz === true &&
+    thresholdMet(h);
 
   const sonderantrag =
     h.wohnsitz === true &&
-    !pensumMet(h, children) &&
+    !thresholdMet(h) &&
     eb >= 1;
 
   const rows = children.map((child) => {
@@ -354,7 +538,24 @@ export function assess(
         finished: false,
         hours: 0,
         eligible: false,
-        reason: "Unter 3 Monaten – nicht berücksichtigt",
+        reason:
+          "Unter 3 Monaten – nicht berücksichtigt",
+        subsidy: 0,
+        hypothetical: 0,
+      };
+    }
+
+    if (finished) {
+      return {
+        id: child.id,
+        name: child.name,
+        months,
+        enrolled,
+        finished: true,
+        hours: 0,
+        eligible: false,
+        reason:
+          "Primarschule abgeschlossen – kein Anspruch",
         subsidy: 0,
         hypothetical: 0,
       };
@@ -363,22 +564,58 @@ export function assess(
     let hours = 0;
     let hypothetical = 0;
 
-    for (const day of Object.values(child.days)) {
-      // Elternferien mit Betreuung zu Hause
-      // ergeben keine externen Betreuungsstunden.
+    const weeklyDays = new Map<string, number>();
+
+    const sortedDays = Object.entries(
+      child.days,
+    ).sort(([a], [b]) =>
+      a.localeCompare(b)
+    );
+
+    for (const [dateKey, day] of sortedDays) {
       if (
         day.elternferien ||
         !day.obhut ||
+        !Number.isFinite(day.hours) ||
         day.hours <= 0
-      ) continue;
+      ) {
+        continue;
+      }
 
-      hours += day.hours;
+      const careDate = parseDate(dateKey);
+
+      if (!careDate) continue;
+
+      const week = weekKey(careDate);
+      const usedDays =
+        weeklyDays.get(week) ?? 0;
+
+      if (usedDays >= MAX_DAYS_PER_WEEK) {
+        continue;
+      }
+
+      const allowedHours = Math.min(
+        MAX_HOURS_PER_DAY,
+        Math.max(0, day.hours),
+      );
+
+      if (allowedHours <= 0) continue;
+
+      weeklyDays.set(
+        week,
+        usedDays + 1,
+      );
+
+      hours += allowedHours;
+
       const rate = maxHourly(
         day.type,
         months,
         enrolled,
       );
-      hypothetical += day.hours * rate * faktor;
+
+      hypothetical +=
+        allowedHours * rate * faktor;
     }
 
     let reason = "Anspruch";
@@ -398,7 +635,8 @@ export function assess(
       reason = "Keine Betreuung mit Obhut";
     } else if (!pensumOk) {
       eligible = false;
-      reason = "Pensum nicht erreicht";
+      reason =
+        "Pensum nicht erreicht – Ausnahmeprüfung möglich";
     }
 
     return {
@@ -410,7 +648,8 @@ export function assess(
       hours,
       eligible,
       reason,
-      subsidy: eligible ? hypothetical : 0,
+      subsidy:
+        eligible ? hypothetical : 0,
       hypothetical,
     };
   });
@@ -421,10 +660,10 @@ export function assess(
     sonderantrag:
       sonderantrag &&
       rows.some(
-        (c) =>
-          c.months >= 3 &&
-          !c.finished &&
-          c.hours > 0,
+        (child) =>
+          child.months >= 3 &&
+          !child.finished &&
+          child.hours > 0
       ),
     eb,
     taxIncome,
@@ -434,18 +673,21 @@ export function assess(
     faktor,
     children: rows,
     hours: rows.reduce(
-      (s, c) => s + c.hours,
+      (sum, child) =>
+        sum + child.hours,
       0,
     ),
     subsidy: rows.reduce(
-      (s, c) => s + c.subsidy,
+      (sum, child) =>
+        sum + child.subsidy,
       0,
     ),
     hypothetical: rows.reduce(
-      (s, c) =>
-        s +
-        (c.months >= 3 && !c.finished
-          ? c.hypothetical
+      (sum, child) =>
+        sum +
+        (child.months >= 3 &&
+        !child.finished
+          ? child.hypothetical
           : 0),
       0,
     ),
@@ -463,12 +705,21 @@ export function curve(
     income <= 180_000;
     income += 5_000
   ) {
-    const r = assess(h, children, income);
+    const result = assess(
+      h,
+      children,
+      income,
+    );
+
     points.push({
       einkommen: income,
-      beitrag: Math.round(r.hypothetical),
+      beitrag: Math.round(
+        result.hypothetical,
+      ),
       stunde:
-        Math.round(r.faktor * 11 * 100) / 100,
+        Math.round(
+          result.faktor * 11 * 100,
+        ) / 100,
     });
   }
 
