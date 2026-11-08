@@ -1,52 +1,53 @@
+
 # KiBG St. Gallen in OpenFisca
 
-Modell des Beitrags an die familienergänzende Kinderbetreuung im Kanton
-St. Gallen. Gesetz: Kinderbetreuungsgesetz (KiBG). Verordnung: KiBV.
-Einkommen: Einführungsgesetz zum Krankenversicherungsgesetz, Art. 12 und
-Art. 12bis (EG-KVG).
+Model of financial contributions towards supplementary childcare in the Canton of St. Gallen.
 
-Das ist ein Hackathon-Stand, kein Gesuchsentscheid.
+Act: Childcare Act (KiBG).
+Ordinance: KiBV.
+Income: Introductory Act to the Federal Health Insurance Act, Articles 12 and 12bis (EG-KVG).
 
-## Was im Repo zum KiBG gehört
+This is a hackathon-stage implementation, not an official decision on an application.
 
-Nur diese Pfade:
+## What Belongs to the KiBG Implementation in the Repository
 
-- `openfisca_ch_sg/variables/kibg_inputs.py` — Eingaben, eine Variable pro Tatbestand
-- `openfisca_ch_sg/variables/kibg_eligibility.py` — Anspruch
-- `openfisca_ch_sg/variables/kibg_income.py` — massgebendes Einkommen
-- `openfisca_ch_sg/variables/kibg_rates.py` — Stundensatz nach Art
-- `openfisca_ch_sg/variables/kibg_calculations.py` — Monatsbeitrag
-- `openfisca_ch_sg/parameters/kibg/` — Sätze und Schwellen
+Only the following paths:
+
+- `openfisca_ch_sg/variables/kibg_inputs.py` — Inputs, one variable per legal condition
+- `openfisca_ch_sg/variables/kibg_eligibility.py` — Eligibility
+- `openfisca_ch_sg/variables/kibg_income.py` — Assessable income
+- `openfisca_ch_sg/variables/kibg_rates.py` — Hourly contribution rate by category
+- `openfisca_ch_sg/variables/kibg_calculations.py` — Monthly contribution
+- `openfisca_ch_sg/parameters/kibg/` — Rates and thresholds
 - `openfisca_ch_sg/tests/kibg_*.yaml`
 
-Der Rest (`benefits`, `taxes`, `reforms`, Grundeinkommen, Wohnbeihilfe) ist
-die OpenFisca-Vorlage. Den brauchen wir nicht.
+The remaining components (`benefits`, `taxes`, `reforms`, basic income, housing assistance) belong to the OpenFisca template. They are not needed for this implementation.
 
-## Schnittstelle
+## Interface
 
-Anspruch, Person, Monat:
+Eligibility, individual, month:
 
-- `kibg_anspruchsberechtigt` — true nur für das betreute Kind
-- `kibg_sonderantrag_noetig` — Pensum fehlt, die übrigen Voraussetzungen gelten
+- `kibg_anspruchsberechtigt` — `true` only for the child receiving childcare
+- `kibg_sonderantrag_noetig` — The employment requirement is not met, but the remaining eligibility conditions are satisfied
 
-Einkommen, Haushalt, Monat, Franken pro Jahr:
+Income, household, month, Swiss francs per year:
 
 - `kibg_massgebendes_einkommen`
-- `massgebendes_einkommen` — derselbe Betrag, auf die Person gelegt
+- `massgebendes_einkommen` — The same amount assigned to the individual
 
-Beitrag, Person, Monat:
+Contribution, individual, month:
 
 - `einkommensfaktor`
 - `maximaler_stundenbeitrag`
-- `gesamter_stundenbeitrag` — `(MaxV + Z1) * Faktor + Z2`
-- `anrechenbare_betreuungsstunden` — höchstens 12 Stunden pro Tag
-- `beitrag_nach_kostenbegrenzung` — nie höher als die tatsächlichen Kosten
+- `gesamter_stundenbeitrag` — `(MaxV + Z1) * Factor + Z2`
+- `anrechenbare_betreuungsstunden` — Maximum of 12 hours per day
+- `beitrag_nach_kostenbegrenzung` — Never higher than the actual costs
 
-Nicht gesetzte Beträge nach Art. 12 EG-KVG zählen als 0.
+Amounts not specified under Article 12 EG-KVG are treated as 0.
 
 ## Tests
 
-Im Repo-Root, mit installiertem Paket:
+Run from the repository root with the package installed:
 
 ```bash
 uv run openfisca test openfisca_ch_sg/tests/kibg_eligibility.yaml --country-package openfisca_ch_sg
@@ -58,31 +59,25 @@ uv run openfisca test openfisca_ch_sg/tests/kibg_hours.yaml --country-package op
 uv run openfisca test openfisca_ch_sg/tests/kibg_zuschlaege.yaml --country-package openfisca_ch_sg
 ```
 
-## Regel: eine Gesetzeszeile, eine Variable
+## Rule: One Legal Provision, One Variable
 
-Jede Ziffer, jeder Buchstabe, jeder Absatz ist eine eigene Variable oder ein
-eigener Parameter. Keine Hilfsfunktion, die mehrere Tatbestände zusammenzieht.
-Eine Formel darf nur das tun, was genau dieser Absatz sagt: zum Beispiel
-addieren, was der Absatz addiert, oder eine Schwelle prüfen.
+Each numbered item, letter, and paragraph is represented by a separate variable or parameter. No helper function should combine multiple legal conditions.
 
-Eingaben in `kibg_inputs.py` und die Parameter unter `parameters/kibg/` halten
-das ein. Jede Ziffer von Art. 12 EG-KVG ist eine eigene Eingabe. Jeder
-Stundensatz im Anhang ist eine eigene YAML-Datei.
+A formula should only perform the operation prescribed by the specific paragraph: for example, adding the amounts that the paragraph requires to be added or checking a threshold.
 
-Diese Formeln fassen noch mehrere Zeilen zusammen und sollten auseinandergezogen
-werden, ohne die Namen der Schnittstelle zu ändern:
+The inputs in `kibg_inputs.py` and the parameters under `parameters/kibg/` follow this principle. Each numbered item of Article 12 EG-KVG is a separate input. Each hourly rate in the annex is stored in a separate YAML file.
 
-| Stelle | Was zusammenliegt |
+The following formulas still combine several legal provisions and should be separated without changing the names of the interface variables:
+
+| Location | What Is Combined |
 | --- | --- |
-| `_erziehungsberechtigte_erwachsene` in `kibg_eligibility.py` | Hilfsfunktion, keine eigene Variable. Wird von Anzahl, Pensum, Wohnsitz und Ausnahme benutzt. |
-| `kibg_pensum_erfuellt` | Allein-Schwelle, gemeinsame Schwelle und Ausnahme in einer Formel. |
-| `kibg_voraussetzungen_ohne_pensum` | Alter, Primarschule, Obhut, Betreuung, Einrichtung und Wohnsitz multipliziert. |
-| `kibg_einkommen_person` | Alle Zuschläge von Art. 12 und der ganze Art. 12bis inklusive Grenzgänger. |
-| `kibg_massgebendes_einkommen` | Veranlagung des vorletzten Jahres und die 25-Prozent-Regel. |
-| `maximaler_stundenbeitrag` | Alle Zeilen des Anhangs in einem `select`. |
-| `einkommensfaktor` | Untergrenze und Obergrenze des Einkommensbands in einer Formel. |
-| `gefaestigte_lebensgemeinschaft` | Ehe und Mindestdauer der Lebensgemeinschaft in einer Formel. |
+| `_erziehungsberechtigte_erwachsene` in `kibg_eligibility.py` | Helper function rather than a separate variable. Used for the number of adults, employment requirements, residence, and exceptions. |
+| `kibg_pensum_erfuellt` | Individual employment threshold, combined employment threshold, and exceptions in one formula. |
+| `kibg_voraussetzungen_ohne_pensum` | Age, primary school, custody, childcare, childcare institution, and residence multiplied together. |
+| `kibg_einkommen_person` | All supplements under Article 12 and the entirety of Article 12bis, including cross-border workers. |
+| `kibg_massgebendes_einkommen` | Tax assessment from the year before last and the 25% rule. |
+| `maximaler_stundenbeitrag` | All lines of the annex combined in one `select` statement. |
+| `einkommensfaktor` | Lower and upper limits of the income range in one formula. |
+| `gefaestigte_lebensgemeinschaft` | Marriage and the minimum duration of a stable cohabiting relationship in one formula. |
 
-Schon getrennt, so soll es bleiben: `zusatzbeitrag_z1`, `zusatzbeitrag_z2`,
-`anrechenbare_betreuungsstunden` (Art. 14 Abs. 4 KiBV),
-`beitrag_nach_kostenbegrenzung` (Art. 6 Abs. 2 und Art. 20 Abs. 3 KiBG).
+Already separated and should remain so: `zusatzbeitrag_z1`, `zusatzbeitrag_z2`, `anrechenbare_betreuungsstunden` (Article 14 paragraph 4 KiBV), and `beitrag_nach_kostenbegrenzung` (Article 6 paragraph 2 and Article 20 paragraph 3 KiBG).
