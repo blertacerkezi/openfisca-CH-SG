@@ -1,192 +1,88 @@
-# OpenFisca model for Sankt Gallen Canton (Switzerland)
+# KiBG St. Gallen in OpenFisca
 
-The country whose law is modelled here has a very simple tax and benefit
-system.
+Modell des Beitrags an die familienergänzende Kinderbetreuung im Kanton
+St. Gallen. Gesetz: Kinderbetreuungsgesetz (KiBG). Verordnung: KiBV.
+Einkommen: Einführungsgesetz zum Krankenversicherungsgesetz, Art. 12 und
+Art. 12bis (EG-KVG).
 
-- It has a flat rate tax whose rates increase every year.
-- On the first of December, 2015, it introduced a basic income for all its
-  citizens of age who have no income.
-- On the first of December, 2016, it removed the income condition, providing
-  all its adult citizens with a basic income.
+Das ist ein Hackathon-Stand, kein Gesuchsentscheid.
 
-These elements are described in different folders. All the modelling happens
-within the `openfisca_ch_sg` folder.
+## Was im Repo zum KiBG gehört
 
-- The rates are in the `parameters` folder.
-- The formulas are in the `variables` folder.
-- This country package comes also with *reforms* in the `reforms` folder. This
-  is optional: your country may exist without defining any reform.
-  - In this country, there is
-    [a reform project](./openfisca_ch_sg/reforms/modify_social_security_taxation.py)
-    aiming to modify the social security taxation, deleting the first bracket,
-    raising the intermediary ones and adding a new bracket with a higher tax
-    rate of `40 %` for people earning more than `40000`. This reform project
-    would apply starting from `2017-01-01`.
+Nur diese Pfade:
 
-The files that are outside from the `openfisca_ch_sg` folder are
-used to set up the development environment.
+- `openfisca_ch_sg/variables/kibg_inputs.py` — Eingaben, eine Variable pro Tatbestand
+- `openfisca_ch_sg/variables/kibg_eligibility.py` — Anspruch
+- `openfisca_ch_sg/variables/kibg_income.py` — massgebendes Einkommen
+- `openfisca_ch_sg/variables/kibg_rates.py` — Stundensatz nach Art
+- `openfisca_ch_sg/variables/kibg_calculations.py` — Monatsbeitrag
+- `openfisca_ch_sg/parameters/kibg/` — Sätze und Schwellen
+- `openfisca_ch_sg/tests/kibg_*.yaml`
 
-## Packaging your Country Package for Distribution
+Der Rest (`benefits`, `taxes`, `reforms`, Grundeinkommen, Wohnbeihilfe) ist
+die OpenFisca-Vorlage. Den brauchen wir nicht.
 
-Country packages are Python distributions. You can choose to distribute your
-package automatically via the predefined continuous deployment system on GitHub
-Actions, or manually.
+## Schnittstelle
 
-### Automatic continuous deployment on GitHub
+Anspruch, Person, Monat:
 
-This repository is configured with a continuous deployment system to automate
-the distribution of your package via `uv`.
+- `kibg_anspruchsberechtigt` — true nur für das betreute Kind
+- `kibg_sonderantrag_noetig` — Pensum fehlt, die übrigen Voraussetzungen gelten
 
-#### Setting up continuous deployment
+Einkommen, Haushalt, Monat, Franken pro Jahr:
 
-To activate the continuous deployment:
+- `kibg_massgebendes_einkommen`
+- `massgebendes_einkommen` — derselbe Betrag, auf die Person gelegt
 
-1. Create an account on [PyPI](https://pypi.org/) if you don't already have
-   one.
-2. Generate a token in your PyPI account. This token will allow GitHub Actions
-   to securely upload new versions of your package to PyPI.
-3. Add this token to your GitHub repository's secrets under the name
-   `PYPI_TOKEN`.
+Beitrag, Person, Monat:
 
-Once set up, changes to the `main` branch will trigger an automated workflow to
-build and publish your package to PyPI, making it available for `uv`
-installation.
+- `einkommensfaktor`
+- `maximaler_stundenbeitrag`
+- `gesamter_stundenbeitrag` — `(MaxV + Z1) * Faktor + Z2`
+- `anrechenbare_betreuungsstunden` — höchstens 12 Stunden pro Tag
+- `beitrag_nach_kostenbegrenzung` — nie höher als die tatsächlichen Kosten
 
-### Manual distribution
+Nicht gesetzte Beträge nach Art. 12 EG-KVG zählen als 0.
 
-If you prefer to manually manage the release and distribution of your package,
-follow the guidelines provided by the
-[Python Packaging Authority](https://python-packaging-user-guide.readthedocs.io/tutorials/distributing-packages/#packaging-your-project).
+## Tests
 
-This involves detailed steps on preparing your package, creating distribution
-files, and uploading them to PyPI.
+Im Repo-Root, mit installiertem Paket:
 
-## Install Instructions for Users and Contributors
-
-This package requires
-[Python 3.11](https://www.python.org/downloads/release/python-390/). More
-recent versions should work, but are not tested.
-
-All platforms that can execute Python are supported, which includes GNU/Linux,
-macOS and Microsoft Windows.
-
-### A. Minimal Installation
-
-Follow this installation if you wish to:
-
-- run calculations on a large population;
-- create tax & benefits simulations;
-- write an extension to this legislation (e.g. city specific tax & benefits);
-- serve your Country Package with the OpenFisca Web API.
-
-For more advanced uses, head to the
-[Advanced Installation](#advanced-installation-git-clone).
-
-#### Install this Country Package with [uv](https://docs.astral.sh/uv/)
-
-Install the Country Package:
-
-```sh
-uv add install openfisca-ch_sg
+```bash
+uv run openfisca test openfisca_ch_sg/tests/kibg_eligibility.yaml --country-package openfisca_ch_sg
+uv run openfisca test openfisca_ch_sg/tests/kibg_income.yaml --country-package openfisca_ch_sg
+uv run openfisca test openfisca_ch_sg/tests/kibg_rates.yaml --country-package openfisca_ch_sg
+uv run openfisca test openfisca_ch_sg/tests/kibg_calculation.yaml --country-package openfisca_ch_sg
+uv run openfisca test openfisca_ch_sg/tests/kibg_costs.yaml --country-package openfisca_ch_sg
+uv run openfisca test openfisca_ch_sg/tests/kibg_hours.yaml --country-package openfisca_ch_sg
+uv run openfisca test openfisca_ch_sg/tests/kibg_zuschlaege.yaml --country-package openfisca_ch_sg
 ```
 
-:tada: This OpenFisca Country Package is now installed and ready!
+## Regel: eine Gesetzeszeile, eine Variable
 
-#### Next Steps
+Jede Ziffer, jeder Buchstabe, jeder Absatz ist eine eigene Variable oder ein
+eigener Parameter. Keine Hilfsfunktion, die mehrere Tatbestände zusammenzieht.
+Eine Formel darf nur das tun, was genau dieser Absatz sagt: zum Beispiel
+addieren, was der Absatz addiert, oder eine Schwelle prüfen.
 
-- To learn how to use OpenFisca, follow our
-  [tutorials](https://openfisca.org/doc/).
-- To serve this Country Package, serve the
-  [OpenFisca Web API](#serve-your-country-package-with-the-openFisca-web-api).
+Eingaben in `kibg_inputs.py` und die Parameter unter `parameters/kibg/` halten
+das ein. Jede Ziffer von Art. 12 EG-KVG ist eine eigene Eingabe. Jeder
+Stundensatz im Anhang ist eine eigene YAML-Datei.
 
-Depending on what you want to do with OpenFisca, you may want to install yet
-other packages:
+Diese Formeln fassen noch mehrere Zeilen zusammen und sollten auseinandergezogen
+werden, ohne die Namen der Schnittstelle zu ändern:
 
-- To install extensions or write on top of this Country Package, head to the
-  [Extensions documentation](https://openfisca.org/doc/contribute/extensions.html).
-- To plot simulation results, try [matplotlib](http://matplotlib.org/).
-- To manage data, check out [pandas](http://pandas.pydata.org/).
+| Stelle | Was zusammenliegt |
+| --- | --- |
+| `_erziehungsberechtigte_erwachsene` in `kibg_eligibility.py` | Hilfsfunktion, keine eigene Variable. Wird von Anzahl, Pensum, Wohnsitz und Ausnahme benutzt. |
+| `kibg_pensum_erfuellt` | Allein-Schwelle, gemeinsame Schwelle und Ausnahme in einer Formel. |
+| `kibg_voraussetzungen_ohne_pensum` | Alter, Primarschule, Obhut, Betreuung, Einrichtung und Wohnsitz multipliziert. |
+| `kibg_einkommen_person` | Alle Zuschläge von Art. 12 und der ganze Art. 12bis inklusive Grenzgänger. |
+| `kibg_massgebendes_einkommen` | Veranlagung des vorletzten Jahres und die 25-Prozent-Regel. |
+| `maximaler_stundenbeitrag` | Alle Zeilen des Anhangs in einem `select`. |
+| `einkommensfaktor` | Untergrenze und Obergrenze des Einkommensbands in einer Formel. |
+| `gefaestigte_lebensgemeinschaft` | Ehe und Mindestdauer der Lebensgemeinschaft in einer Formel. |
 
-### B. Advanced Installation (Git Clone)
-
-Follow this tutorial if you wish to:
-
-- create or change this Country Package's legislation;
-- contribute to the source code.
-
-#### Clone this Country Package with Git
-
-First, make sure [Git](https://www.git-scm.com/) is installed on your machine.
-
-Set your working directory to the location where you want this OpenFisca
-Country Package cloned.
-
-Clone this Country Package on your machine:
-
-```sh
-git clone git://github.com/openfisca/openfisca-CH-SG.git
-cd openfisca-CH-SG
-```
-
-You can make sure that everything is working by running the provided tests with
-`make test`.
-
-> [Learn more about tests](https://openfisca.org/doc/coding-the-legislation/writing_yaml_tests.html)
-
-:tada: This OpenFisca Country Package is now installed and ready!
-
-#### Next Steps
-
-- To write new legislation, read the
-  [Coding the legislation](https://openfisca.org/doc/coding-the-legislation/index.html)
-  section to know how to write legislation.
-- To contribute to the code, read our
-  [Contribution Guidebook](https://openfisca.org/doc/contribute/index.html).
-
-### C. Contributing
-
-- Read [CONTRIBUTING](CONTRIBUTING.md).
-- Open a pull request to the `main` branch of this repository.
-- Announce your changes as described in [CONTRIBUTING](CONTRIBUTING.md).
-
-## Serve this Country Package with the OpenFisca Web API
-
-If you are considering building a web application, you can use the packaged
-OpenFisca Web API with your Country Package.
-
-To serve the Openfisca Web API locally, run:
-
-```sh
-openfisca serve --port 5000 --country-package openfisca_ch_sg
-```
-
-Or use the quick-start Make command:
-
-```
-make serve-local
-```
-
-To read more about the `openfisca serve` command, check out its
-[documentation](https://openfisca.org/doc/openfisca-python-api/openfisca_serve.html).
-
-You can make sure that your instance of the API is working by requesting:
-
-```sh
-curl "http://localhost:5000/spec"
-```
-
-This endpoint returns the [Open API specification](https://www.openapis.org/)
-of your API.
-
-:tada: This OpenFisca Country Package is now served by the OpenFisca Web API!
-To learn more, go to the
-[OpenFisca Web API documentation](https://openfisca.org/doc/openfisca-web-api/index.html).
-
-You can test your new Web API by sending it example JSON data located in the
-`situation_examples` folder.
-
-```sh
-curl -X POST -H "Content-Type: application/json" \
-  -d @./openfisca_ch_sg/situation_examples/couple.json \
-  http://localhost:5000/calculate
-```
+Schon getrennt, so soll es bleiben: `zusatzbeitrag_z1`, `zusatzbeitrag_z2`,
+`anrechenbare_betreuungsstunden` (Art. 14 Abs. 4 KiBV),
+`beitrag_nach_kostenbegrenzung` (Art. 6 Abs. 2 und Art. 20 Abs. 3 KiBG).
