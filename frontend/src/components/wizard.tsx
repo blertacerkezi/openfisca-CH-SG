@@ -1,4 +1,5 @@
 import { lazy, Suspense, useState, type ReactNode } from "react";
+import { Overview } from "@/components/overview";
 import { Articles, type ArticleStep } from "@/components/articles";
 import { CareCalendar } from "@/components/care-calendar";
 import {
@@ -142,8 +143,8 @@ export function Wizard() {
           Beitrag für die Kinderbetreuung
         </h1>
         <p className="max-w-lg text-lg text-muted">
-          Zuerst die Rolle. Für Privatpersonen folgt der Fragebogen der Law-Leute. Die
-          Kantonsansicht kommt später.
+          Zwei Wege. Das eigene Gesuch prüfen, oder anschauen, was von einem zusätzlichen Lohn
+          bleibt, wenn Regeln und Hebel sich ändern.
         </p>
         <div className="grid gap-3 sm:grid-cols-2">
           <button
@@ -159,8 +160,8 @@ export function Wizard() {
             onClick={() => setScreen("kanton")}
             className="min-h-24 rounded-card border border-line bg-card px-6 text-left"
           >
-            <span className="block font-serif text-2xl">Kanton</span>
-            <span className="text-muted">Noch nicht gebaut</span>
+            <span className="block font-serif text-2xl">Wirkung ansehen</span>
+            <span className="text-muted">Was von 100 Franken Mehrlohn bleibt</span>
           </button>
         </div>
       </main>
@@ -168,17 +169,7 @@ export function Wizard() {
   }
 
   if (screen === "kanton") {
-    return (
-      <main className="mx-auto flex min-h-screen max-w-xl flex-col justify-center gap-4 px-5">
-        <h1 className="font-serif text-4xl">Kanton folgt</h1>
-        <p className="text-muted">
-          Gemeinden, Einrichtungen und die Auszahlung bauen wir in einem zweiten Schritt.
-        </p>
-        <button type="button" onClick={() => setScreen("gate")} className="min-h-11 self-start text-pine">
-          Zurück zur Auswahl
-        </button>
-      </main>
-    );
+    return <Overview onBack={() => setScreen("gate")} />;
   }
 
   return (
@@ -667,9 +658,6 @@ function Num({
         type="number"
         min={0}
         value={Number.isFinite(value) ? value : 0}
-        onFocus={(e) => {
-          if (e.currentTarget.value === "0") e.currentTarget.select();
-        }}
         onChange={(e) => onChange(Number(e.target.value))}
         className="mt-1 min-h-11 w-full rounded-card border border-line bg-card px-3 text-ink"
       />
