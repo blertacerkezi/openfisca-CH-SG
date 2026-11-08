@@ -437,18 +437,14 @@ export function Overview({ onBack }: { onBack: () => void }) {
           </div>
 
           <div>
-            <h3 className="font-medium">Wenn die Angabe nicht stimmt</h3>
+            <h3 className="font-medium">Mögliche Loopholes</h3>
             <div className="mt-2 flex flex-col gap-2">
-              <Note title="Pensum zu hoch angegeben">
-                Fehlt das Pensum, zahlt der Kanton nichts. Es bleibt der Punkt ohne Gesetz:{" "}
-                {w.ohne.quote} %. Prüfbar am Arbeitsvertrag.
-              </Note>
-              <Note title="Einkommen steigt, nicht gemeldet">
+              <Note title="Einkommen steigt, nicht gemeldet · Art. 11 KiBV">
                 Ein Viertel mehr Einkommen senkt den Faktor auf {Math.round(w.einkommen25.faktor * 100)} %.
                 Beitrag dann {chf(w.einkommen25.beitrag)} statt {chf(gezeigt.beitrag)}, es bleiben{" "}
                 {w.einkommen25.quote} %.
               </Note>
-              <Note title="Mehr Betreuung als Arbeit">
+              <Note title="Mehr Betreuung als Arbeit · Art. 7 KiBV">
                 Zwei zusätzliche Betreuungstage ohne mehr Lohn kosten {chf(w.extraBetreuung)} extra.
                 Dann bleiben {w.extraQuote} %.
               </Note>
@@ -645,11 +641,11 @@ function MarkedRange({
           className="relative z-10 w-full accent-pine"
         />
         <span
-          className="pointer-events-none absolute top-1/2 z-20 h-4 w-0.5 -translate-x-1/2 -translate-y-1/2 bg-ink"
+          className="pointer-events-none absolute top-1/2 z-20 h-5 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-clay"
           style={{ left: `${pct}%` }}
         />
       </span>
-      <span className="mt-1 block text-xs text-muted">Gesetz {format(gesetz)}</span>
+      <span className="mt-1 block text-xs text-ink">Gesetz {format(gesetz)}</span>
     </label>
   );
 }
