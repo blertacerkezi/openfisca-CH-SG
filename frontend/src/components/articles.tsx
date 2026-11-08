@@ -35,13 +35,28 @@ const ARTICLES: Record<
       body: "Die Betreuung muss in einer anerkannten und angemeldeten Einrichtung stattfinden: Kindertagesstätte, Tagesfamilie oder schulergänzende Betreuung.",
     },
   ],
+  
   kalender: [
+    {
+      id: "a14",
+      title: "Art. 14 Abs. 4 KiBV — Betreuungsstunden und Betreuungstage",
+      body:
+        "Für die Berechnung des Betreuungsbeitrags werden pro Kind " +
+        "höchstens 12 Betreuungsstunden pro Tag und höchstens " +
+        "5 Betreuungstage pro Woche berücksichtigt. " +
+        "Diese Grenzen beziehen sich auf die subventionierbare Betreuung.",
+    },
     {
       id: "a7",
       title: "Art. 7 KiBV — Obhut und Betreuung",
-      body: "Gezählt werden nur Tage, an denen die faktische Obhut besteht und Betreuung tatsächlich beansprucht wird. Stunden und Betreuungsart am Kalendertag bestimmen den Beitrag dieses Monats.",
+      body:
+        "Gezählt werden nur Tage, an denen die faktische Obhut besteht " +
+        "und Betreuung tatsächlich beansprucht wird. " +
+        "Stunden und Betreuungsart am Kalendertag bestimmen " +
+        "den Beitrag dieses Monats.",
     },
   ],
+
   haushalt: [
     {
       id: "pensum",

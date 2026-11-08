@@ -521,25 +521,7 @@ export function CareCalendar({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="rounded-card border border-line bg-sand p-4 text-sm">
-        <p className="font-medium text-ink">
-          Gesetzliche Begrenzung der subventionierten Betreuung
-        </p>
-
-        <p className="mt-2 text-muted">
-          Pro Kind können höchstens 12 Betreuungsstunden
-          pro Tag und höchstens 5 Betreuungstage pro Woche
-          berücksichtigt werden.
-          Rechtsgrundlage: Art. 14 Abs. 4 KiBV.
-        </p>
-
-        <p className="mt-1 text-muted">
-          Diese Grenzen betreffen die subventionierbare
-          Betreuung, nicht zwingend die tatsächlich
-          genutzte Betreuung.
-        </p>
-      </div>
-
+      
       {/* Kind auswählen */}
       <div className="flex flex-wrap gap-2">
         {children.map((item, index) => (
