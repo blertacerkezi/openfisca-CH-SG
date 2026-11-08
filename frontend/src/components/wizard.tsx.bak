@@ -1,0 +1,822 @@
+import { lazy, Suspense, useState, type ReactNode } from "react";
+import { Articles, type ArticleStep } from "@/components/articles";
+import { CareCalendar } from "@/components/care-calendar";
+import {
+  type ChildInput,
+  type HouseholdInput,
+  type IncomeInput,
+  type TaxPath,
+  ebCount,
+  emptyIncome,
+  needsDeclaration,
+  needsMeldung,
+  thresholdMet,
+} from "@/lib/kibg";
+
+const ResultPanel = lazy(() => import("@/components/result-panel"));
+
+const TITLES: Record<ArticleStep, string> = {
+  wohnsitz: "Wohnsitz",
+  kinder: "Kinder",
+  kalender: "Betreuung",
+  haushalt: "Haushalt und Arbeit",
+  einkommen: "Einkommen und Vermögen",
+  aktuell: "Heutige Lage",
+  meldung: "Meldung an den Kanton",
+  result: "Beitrag",
+};
+
+function flowFor(household: HouseholdInput): ArticleStep[] {
+  const steps: ArticleStep[] = [
+    "wohnsitz",
+    "kinder",
+    "kalender",
+    "haushalt",
+    "einkommen",
+    "aktuell",
+  ];
+  if (needsMeldung(household)) steps.push("meldung");
+  steps.push("result");
+  return steps;
+}
+
+function blankChild(index: number): ChildInput {
+  return {
+    id: `kind-${index}-${Math.random().toString(36).slice(2, 7)}`,
+    name: `Kind ${index}`,
+    birth: "",
+    einschulung: "",
+    primarEnde: "",
+    kindlicheIndikation: false,
+    days: {},
+  };
+}
+
+function blankHousehold(): HouseholdInput {
+  return {
+    wohnsitz: null,
+    zusammen: null,
+    erwerb: null,
+    getrenntArt: null,
+    konkubinatJahre: 0,
+    partnerErziehungsberechtigt: false,
+    pensum1: 0,
+    pensum2: 0,
+    integration1: false,
+    integration2: false,
+    belastung1: false,
+    belastung2: false,
+    begruendung: "",
+    nachweisLohn: false,
+    nachweisKonto: false,
+    nachweisAndere: false,
+    nachweisText: "",
+    bestaetigung: false,
+    taxPath: null,
+    income1: emptyIncome(),
+    income2: emptyIncome(),
+  };
+}
+
+export function Wizard() {
+  const [screen, setScreen] = useState<"gate" | "kanton" | "flow">("gate");
+  const [stepIndex, setStepIndex] = useState(0);
+  const [blocked, setBlocked] = useState<string | null>(null);
+  const [count, setCount] = useState(1);
+  const [children, setChildren] = useState<ChildInput[]>([blankChild(1)]);
+  const [household, setHousehold] = useState<HouseholdInput>(blankHousehold);
+  const flow = flowFor(household);
+  const step = flow[Math.min(stepIndex, flow.length - 1)] ?? "wohnsitz";
+
+  function restart() {
+    setScreen("gate");
+    setStepIndex(0);
+    setBlocked(null);
+    setCount(1);
+    setChildren([blankChild(1)]);
+    setHousehold(blankHousehold());
+  }
+
+  function back() {
+    if (blocked) {
+      setBlocked(null);
+      return;
+    }
+    if (stepIndex === 0) setScreen("gate");
+    else setStepIndex((n) => n - 1);
+  }
+
+  function next() {
+    if (step === "wohnsitz" && household.wohnsitz === false) {
+      setBlocked("Ohne Wohnsitz im Kanton St. Gallen besteht kein Anspruch.");
+      return;
+    }
+    if (step === "kinder") {
+      const n = Math.min(6, Math.max(1, count));
+      setChildren((prev) =>
+        Array.from({ length: n }, (_, i) => prev[i] ?? blankChild(i + 1)),
+      );
+    }
+    setStepIndex((n) => Math.min(flow.length - 1, n + 1));
+  }
+
+  function updateChild(
+    index: number,
+    patch: Partial<
+      Pick<ChildInput, "name" | "birth" | "einschulung" | "primarEnde" | "kindlicheIndikation">
+    >,
+  ) {
+    setChildren((prev) => {
+      const nextChildren = [...prev];
+      const current = nextChildren[index] ?? blankChild(index + 1);
+      nextChildren[index] = { ...current, ...patch };
+      return nextChildren;
+    });
+  }
+
+  if (screen === "gate") {
+    return (
+      <main className="mx-auto flex min-h-screen max-w-5xl flex-col justify-center gap-8 px-5 py-10">
+        <p className="text-sm font-medium tracking-wide text-pine uppercase">Kanton St. Gallen</p>
+        <h1 className="max-w-xl font-serif text-4xl leading-tight text-ink sm:text-5xl">
+          Beitrag für die Kinderbetreuung
+        </h1>
+        <p className="max-w-lg text-lg text-muted">
+          Zuerst die Rolle. Für Privatpersonen folgt der Fragebogen der Law-Leute. Die
+          Kantonsansicht kommt später.
+        </p>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <button
+            type="button"
+            onClick={() => setScreen("flow")}
+            className="min-h-24 rounded-card bg-pine px-6 text-left text-pine-ink"
+          >
+            <span className="block font-serif text-2xl">Privatperson</span>
+            <span className="text-pine-ink">Anspruch und Beitrag prüfen</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setScreen("kanton")}
+            className="min-h-24 rounded-card border border-line bg-card px-6 text-left"
+          >
+            <span className="block font-serif text-2xl">Kanton</span>
+            <span className="text-muted">Noch nicht gebaut</span>
+          </button>
+        </div>
+      </main>
+    );
+  }
+
+  if (screen === "kanton") {
+    return (
+      <main className="mx-auto flex min-h-screen max-w-xl flex-col justify-center gap-4 px-5">
+        <h1 className="font-serif text-4xl">Kanton folgt</h1>
+        <p className="text-muted">
+          Gemeinden, Einrichtungen und die Auszahlung bauen wir in einem zweiten Schritt.
+        </p>
+        <button type="button" onClick={() => setScreen("gate")} className="min-h-11 self-start text-pine">
+          Zurück zur Auswahl
+        </button>
+      </main>
+    );
+  }
+
+  return (
+    <main className="mx-auto grid min-h-screen max-w-6xl gap-8 px-4 py-6 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] lg:px-6">
+      <Articles step={blocked ? "wohnsitz" : step} />
+      <section className="rounded-card border border-line bg-card p-5">
+        <div className="mb-5 flex items-center justify-between gap-3 text-sm text-muted">
+          <button type="button" onClick={back} className="min-h-11">
+            Zurück
+          </button>
+          <span>
+            {blocked
+              ? "Kein Anspruch"
+              : `${Math.min(stepIndex, flow.length - 1) + 1} / ${flow.length} · ${TITLES[step]}`}
+          </span>
+          <button type="button" onClick={restart} className="min-h-11">
+            Neu
+          </button>
+        </div>
+        {blocked ? (
+          <div className="flex flex-col gap-4">
+            <h2 className="font-serif text-3xl">Leider kein Anspruch</h2>
+            <p>{blocked}</p>
+            <button
+              type="button"
+              onClick={restart}
+              className="min-h-11 self-start rounded-card bg-pine px-4 text-pine-ink"
+            >
+              Von vorn
+            </button>
+          </div>
+        ) : (
+          <>
+            {step === "wohnsitz" && (
+              <Block title="Sind Sie wohnhaft im Kanton St. Gallen?">
+                <Choices
+                  value={household.wohnsitz === null ? "" : household.wohnsitz ? "ja" : "nein"}
+                  options={[
+                    ["ja", "Ja"],
+                    ["nein", "Nein"],
+                  ]}
+                  onChange={(value) => setHousehold({ ...household, wohnsitz: value === "ja" })}
+                />
+              </Block>
+            )}
+            {step === "kinder" && (
+              <Block title="Für wie viele Kinder wollen Sie Beiträge beantragen?">
+                <label className="block text-sm text-muted">
+                  Anzahl
+                  <input
+                    type="number"
+                    min={1}
+                    max={6}
+                    value={count}
+                    onChange={(e) => setCount(Number(e.target.value))}
+                    className="mt-1 min-h-11 w-24 rounded-card border border-line px-3"
+                  />
+                </label>
+                <div className="mt-4 flex flex-col gap-4">
+                  {Array.from({ length: Math.min(6, Math.max(1, count)) }, (_, index) => {
+                    const child = children[index] ?? {
+                      name: `Kind ${index + 1}`,
+                      birth: "",
+                      einschulung: "",
+                      primarEnde: "",
+                    };
+                    return (
+                      <fieldset key={index} className="rounded-card bg-sand p-4">
+                        <legend className="font-medium">Kind {index + 1}</legend>
+                        <Field
+                          label="Name"
+                          value={child.name}
+                          onChange={(name) => updateChild(index, { name })}
+                        />
+                        <Field
+                          label="Geburtsdatum"
+                          type="date"
+                          value={child.birth}
+                          onChange={(birth) => updateChild(index, { birth })}
+                        />
+                        <Field
+                          label="Datum der Einschulung"
+                          type="date"
+                          value={child.einschulung}
+                          onChange={(einschulung) => updateChild(index, { einschulung })}
+                        />
+                        <Field
+                          label="Voraussichtliches Ende der Primarstufe"
+                          type="date"
+                          value={child.primarEnde}
+                          onChange={(primarEnde) => updateChild(index, { primarEnde })}
+                        />
+                      </fieldset>
+                    );
+                  })}
+                </div>
+              </Block>
+            )}
+            {step === "kalender" && (
+              <Block title="An welchen Tagen wird betreut?">
+                <p className="text-muted">
+                  Nur Tage mit Obhut. Art der Betreuung und Stunden eintragen. Das Wochenmuster
+                  lässt sich auf zwölf Monate kopieren.
+                </p>
+                <CareCalendar children={children} onChange={setChildren} />
+              </Block>
+            )}
+            {step === "haushalt" && (
+              <Block title="Leben Sie mit der anderen erziehungsberechtigten Person zusammen?">
+                <Choices
+                  value={household.zusammen ?? ""}
+                  options={[
+                    ["gemeinsam", "Gemeinsamer Haushalt"],
+                    ["getrennt", "Getrennter Haushalt"],
+                  ]}
+                  onChange={(zusammen) =>
+                    setHousehold({
+                      ...household,
+                      zusammen: zusammen as HouseholdInput["zusammen"],
+                    })
+                  }
+                />
+                {household.zusammen === "gemeinsam" && (
+                  <div className="mt-4">
+                    <p className="mb-2 font-medium">Wer ist erwerbstätig?</p>
+                    <Choices
+                      value={household.erwerb ?? ""}
+                      options={[
+                        ["beide", "Beide"],
+                        ["eine", "Nur eine Person"],
+                      ]}
+                      onChange={(erwerb) =>
+                        setHousehold({ ...household, erwerb: erwerb as HouseholdInput["erwerb"] })
+                      }
+                    />
+                  </div>
+                )}
+                {household.zusammen === "getrennt" && (
+                  <div className="mt-4">
+                    <p className="mb-2 font-medium">Was trifft auf den Haushalt zu?</p>
+                    <Choices
+                      value={household.getrenntArt ?? ""}
+                      options={[
+                        ["ehe", "Ehe oder eingetragene Partnerschaft"],
+                        ["konkubinat", "Konkubinat"],
+                        ["alleine", "Ich lebe alleine"],
+                      ]}
+                      onChange={(getrenntArt) =>
+                        setHousehold({
+                          ...household,
+                          getrenntArt: getrenntArt as HouseholdInput["getrenntArt"],
+                        })
+                      }
+                    />
+                  </div>
+                )}
+                {household.getrenntArt === "konkubinat" && household.zusammen === "getrennt" && (
+                  <div className="mt-4 flex flex-col gap-3">
+                    <Num
+                      label="Jahre der Lebensgemeinschaft"
+                      value={household.konkubinatJahre}
+                      onChange={(konkubinatJahre) => setHousehold({ ...household, konkubinatJahre })}
+                    />
+                    <Check
+                      label="Die andere Person ist ebenfalls erziehungsberechtigt"
+                      checked={household.partnerErziehungsberechtigt}
+                      onChange={(partnerErziehungsberechtigt) =>
+                        setHousehold({ ...household, partnerErziehungsberechtigt })
+                      }
+                    />
+                  </div>
+                )}
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  <Num
+                    label={
+                      household.erwerb === "beide" || household.getrenntArt === "ehe"
+                        ? "Pensum Person 1 in Prozent"
+                        : "Pensum in Prozent"
+                    }
+                    value={household.pensum1}
+                    onChange={(pensum1) => setHousehold({ ...household, pensum1 })}
+                  />
+                  {(household.erwerb === "beide" ||
+                    household.getrenntArt === "ehe" ||
+                    (household.getrenntArt === "konkubinat" &&
+                      household.partnerErziehungsberechtigt)) && (
+                    <Num
+                      label="Pensum Person 2 in Prozent"
+                      value={household.pensum2}
+                      onChange={(pensum2) => setHousehold({ ...household, pensum2 })}
+                    />
+                  )}
+                </div>
+                <p className="mt-3 text-sm text-muted">
+                  Eine Person: mindestens 20 Prozent. Zwei Personen: zusammen mindestens 120 Prozent.
+                </p>
+              </Block>
+            )}
+            {step === "einkommen" && (
+              <Block title="Welche Aussage zur Steuer trifft zu?">
+                <Choices
+                  value={household.taxPath ?? ""}
+                  options={[
+                    ["ordentlich", "Ordentlich besteuert, Veranlagung rechtskräftig"],
+                    ["nicht-rechtskraeftig", "Keine rechtskräftige Steuerveranlagung"],
+                    ["quellen", "Quellenbesteuert"],
+                    ["keine-veranlagung", "Keine ordentliche Steuerveranlagung"],
+                  ]}
+                  onChange={(taxPath) => setHousehold({ ...household, taxPath: taxPath as TaxPath })}
+                />
+                {household.taxPath === "quellen" && (
+                  <p className="mt-3 text-sm text-muted">
+                    Art. 12bis: definitives Bruttoeinkommen der Quellensteuer 2024 plus Lohn aus
+                    dem vereinfachten Verfahren, davon 75 Prozent.
+                  </p>
+                )}
+                {household.taxPath === "nicht-rechtskraeftig" && (
+                  <p className="mt-3 text-sm text-muted">
+                    Art. 12 Abs. 1: ohne rechtskräftige Veranlagung gilt die Steuerdeklaration,
+                    mit denselben Zuschlägen wie bei der Veranlagung. Art. 12bis gilt hier nicht.
+                  </p>
+                )}
+                {household.taxPath === "keine-veranlagung" && (
+                  <p className="mt-3 text-sm text-muted">
+                    Art. 12a: Einkommens- und Vermögensnachweise. Vermögen zählt zu 20 Prozent.
+                  </p>
+                )}
+                {household.taxPath && (
+                  <IncomeFields
+                    title="Ihre Angaben, Steuerjahr 2024"
+                    path={household.taxPath}
+                    value={household.income1}
+                    onChange={(income1) => setHousehold({ ...household, income1 })}
+                  />
+                )}
+                {household.taxPath && needsPartner(household) && (
+                  <IncomeFields
+                    title="Andere Person, Steuerjahr 2024"
+                    path={household.taxPath}
+                    value={household.income2}
+                    onChange={(income2) => setHousehold({ ...household, income2 })}
+                  />
+                )}
+              </Block>
+            )}
+            {step === "aktuell" && (
+              <Block title="Was ist das heutige Einkommen?">
+                <p className="text-muted">
+                  Nur ausfüllen, wenn Sie die aktuelle Lage kennen. Ab 25 Prozent Abweichung
+                  ersetzt sie die Veranlagung.
+                </p>
+                <CurrentFields
+                  label="Ihr heutiges massgebendes Einkommen"
+                  value={household.income1}
+                  onChange={(income1) => setHousehold({ ...household, income1 })}
+                />
+                {needsPartner(household) && (
+                  <CurrentFields
+                    label="Heutiges Einkommen der anderen Person"
+                    value={household.income2}
+                    onChange={(income2) => setHousehold({ ...household, income2 })}
+                  />
+                )}
+              </Block>
+            )}
+            {step === "meldung" && (
+              <Block title="Was soll der Kanton zusätzlich prüfen?">
+                {!thresholdMet(household) && (
+                  <div className="flex flex-col gap-3">
+                    <p className="text-muted">
+                      Das Pensum liegt unter {ebCount(household) === 1 ? "20" : "120"} Prozent.
+                      Mindestens ein Grund nach Art. 12 KiBV und eine kurze Begründung.
+                    </p>
+                    <Check
+                      label="Person 1: berufliche Integration, Stellensuche oder Weiterbildung"
+                      checked={household.integration1}
+                      onChange={(integration1) => setHousehold({ ...household, integration1 })}
+                    />
+                    <Check
+                      label="Person 1: familiäre Belastung"
+                      checked={household.belastung1}
+                      onChange={(belastung1) => setHousehold({ ...household, belastung1 })}
+                    />
+                    {ebCount(household) > 1 && (
+                      <>
+                        <Check
+                          label="Person 2: berufliche Integration, Stellensuche oder Weiterbildung"
+                          checked={household.integration2}
+                          onChange={(integration2) => setHousehold({ ...household, integration2 })}
+                        />
+                        <Check
+                          label="Person 2: familiäre Belastung"
+                          checked={household.belastung2}
+                          onChange={(belastung2) => setHousehold({ ...household, belastung2 })}
+                        />
+                      </>
+                    )}
+                    {children.map((child, index) => (
+                      <Check
+                        key={child.id}
+                        label={`${child.name || `Kind ${index + 1}`}: Entwicklungs-, Verhaltens- oder Sprachindikation`}
+                        checked={child.kindlicheIndikation}
+                        onChange={(kindlicheIndikation) => updateChild(index, { kindlicheIndikation })}
+                      />
+                    ))}
+                    <label className="block text-sm text-muted">
+                      Begründung für den Kanton
+                      <textarea
+                        value={household.begruendung}
+                        onChange={(e) => setHousehold({ ...household, begruendung: e.target.value })}
+                        rows={4}
+                        className="mt-1 w-full rounded-card border border-line bg-card px-3 py-2 text-ink"
+                      />
+                    </label>
+                  </div>
+                )}
+                {needsDeclaration(household) && (
+                  <div className="mt-4 flex flex-col gap-3">
+                    <p className="font-medium">Nachweise statt Veranlagung</p>
+                    <Check
+                      label="Lohnausweis oder Lohnabrechnung"
+                      checked={household.nachweisLohn}
+                      onChange={(nachweisLohn) => setHousehold({ ...household, nachweisLohn })}
+                    />
+                    <Check
+                      label="Konto- oder Vermögensauszug"
+                      checked={household.nachweisKonto}
+                      onChange={(nachweisKonto) => setHousehold({ ...household, nachweisKonto })}
+                    />
+                    <Check
+                      label="Andere Belege"
+                      checked={household.nachweisAndere}
+                      onChange={(nachweisAndere) => setHousehold({ ...household, nachweisAndere })}
+                    />
+                    <label className="block text-sm text-muted">
+                      Welche Belege, kurz
+                      <textarea
+                        value={household.nachweisText}
+                        onChange={(e) => setHousehold({ ...household, nachweisText: e.target.value })}
+                        rows={3}
+                        className="mt-1 w-full rounded-card border border-line bg-card px-3 py-2 text-ink"
+                      />
+                    </label>
+                    <Check
+                      label="Ich bestätige, dass die Zahlen den Belegen entsprechen"
+                      checked={household.bestaetigung}
+                      onChange={(bestaetigung) => setHousehold({ ...household, bestaetigung })}
+                    />
+                  </div>
+                )}
+              </Block>
+            )}
+            {step === "result" && (
+              <Suspense fallback={<p>Beitrag wird gerechnet …</p>}>
+                <ResultPanel household={household} children={children} />
+              </Suspense>
+            )}
+            {step !== "result" && (
+              <button
+                type="button"
+                onClick={next}
+                disabled={!canContinue(step, household, count, children)}
+                className="mt-6 min-h-11 rounded-card bg-pine px-5 text-pine-ink disabled:opacity-40"
+              >
+                Weiter
+              </button>
+            )}
+          </>
+        )}
+      </section>
+    </main>
+  );
+}
+
+function needsPartner(h: HouseholdInput) {
+  if (h.zusammen === "gemeinsam") return h.erwerb === "beide";
+  if (h.getrenntArt === "ehe") return true;
+  if (h.getrenntArt === "konkubinat") return h.konkubinatJahre >= 2 || h.partnerErziehungsberechtigt;
+  return false;
+}
+
+function exceptionReady(h: HouseholdInput, kids: ChildInput[]) {
+  return (
+    h.integration1 ||
+    h.integration2 ||
+    h.belastung1 ||
+    h.belastung2 ||
+    kids.some((child) => child.kindlicheIndikation)
+  );
+}
+
+function canContinue(step: ArticleStep, h: HouseholdInput, count: number, kids: ChildInput[]) {
+  if (step === "wohnsitz") return h.wohnsitz !== null;
+  if (step === "kinder") {
+    const n = Math.min(6, Math.max(1, count));
+    return Array.from({ length: n }, (_, i) => kids[i]?.birth).every(Boolean);
+  }
+  if (step === "haushalt") {
+    if (!h.zusammen) return false;
+    if (h.zusammen === "gemeinsam" && !h.erwerb) return false;
+    if (h.zusammen === "getrennt" && !h.getrenntArt) return false;
+    return true;
+  }
+  if (step === "einkommen") return h.taxPath !== null;
+  if (step === "meldung") {
+    const ausnahmeOk = thresholdMet(h) || (exceptionReady(h, kids) && h.begruendung.trim().length > 8);
+    const deklariert = !needsDeclaration(h) || h.bestaetigung;
+    return ausnahmeOk && deklariert;
+  }
+  return true;
+}
+
+function Block({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div>
+      <h2 className="mb-4 font-serif text-3xl leading-tight">{title}</h2>
+      {children}
+    </div>
+  );
+}
+
+function Choices({
+  value,
+  options,
+  onChange,
+}: {
+  value: string;
+  options: Array<[string, string]>;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-2">
+      {options.map(([id, label]) => (
+        <button
+          key={id}
+          type="button"
+          onClick={() => onChange(id)}
+          className={`min-h-11 rounded-card border px-4 text-left ${
+            value === id ? "border-pine bg-moss" : "border-line bg-card"
+          }`}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function Field({
+  label,
+  value,
+  onChange,
+  type = "text",
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  type?: string;
+}) {
+  return (
+    <label className="mt-3 block text-sm text-muted">
+      {label}
+      <input
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="mt-1 min-h-11 w-full rounded-card border border-line bg-card px-3 text-ink"
+      />
+    </label>
+  );
+}
+
+function Num({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <label className="block text-sm text-muted">
+      {label}
+      <input
+        type="number"
+        min={0}
+        value={Number.isFinite(value) ? value : 0}
+        onFocus={(e) => {
+          if (e.currentTarget.value === "0") e.currentTarget.select();
+        }}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="mt-1 min-h-11 w-full rounded-card border border-line bg-card px-3 text-ink"
+      />
+    </label>
+  );
+}
+
+function Check({
+  label,
+  checked,
+  onChange,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (value: boolean) => void;
+}) {
+  return (
+    <label className="flex min-h-11 items-start gap-2">
+      <input
+        type="checkbox"
+        className="mt-1"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+      />
+      <span>{label}</span>
+    </label>
+  );
+}
+
+function IncomeFields({
+  title,
+  path,
+  value,
+  onChange,
+}: {
+  title: string;
+  path: TaxPath;
+  value: IncomeInput;
+  onChange: (next: IncomeInput) => void;
+}) {
+  const set = (key: keyof IncomeInput, amount: number) => onChange({ ...value, [key]: amount });
+  return (
+    <fieldset className="mt-4 rounded-card bg-sand p-4">
+      <legend className="font-medium">{title}</legend>
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        {path === "quellen" ? (
+          <>
+            <Num
+              label="Bruttoeinkommen Quellensteuer"
+              value={value.bruttoQuellen}
+              onChange={(n) => set("bruttoQuellen", n)}
+            />
+            <Num
+              label="Lohn vereinfachtes Verfahren"
+              value={value.bruttolohnEinfach}
+              onChange={(n) => set("bruttolohnEinfach", n)}
+            />
+          </>
+        ) : path === "keine-veranlagung" ? (
+          <>
+            <Num
+              label="Einkommen laut Nachweis"
+              value={value.reineinkommen}
+              onChange={(n) => set("reineinkommen", n)}
+            />
+            <Num
+              label="Vermögen laut Nachweis"
+              value={value.vermoegen}
+              onChange={(n) => set("vermoegen", n)}
+            />
+          </>
+        ) : (
+          <>
+            <Num label="Reineinkommen" value={value.reineinkommen} onChange={(n) => set("reineinkommen", n)} />
+            <Num label="Steuerbares Vermögen" value={value.vermoegen} onChange={(n) => set("vermoegen", n)} />
+            <Num label="Säule 3a" value={value.saeule3a} onChange={(n) => set("saeule3a", n)} />
+            <Num label="BVG-Leistungen und Einkauf" value={value.bvg} onChange={(n) => set("bvg", n)} />
+            <Num
+              label="Liegenschaftsaufwand über der Pauschale"
+              value={value.liegenschaft}
+              onChange={(n) => set("liegenschaft", n)}
+            />
+            <Num label="Vorjahresverlust" value={value.verlust} onChange={(n) => set("verlust", n)} />
+            <Num
+              label="Lohn vereinfachtes Verfahren"
+              value={value.bruttolohnEinfach}
+              onChange={(n) => set("bruttolohnEinfach", n)}
+            />
+            <Num label="Freiwillige Zuwendungen" value={value.zuwendungen} onChange={(n) => set("zuwendungen", n)} />
+            <Num label="Eigenmietwert" value={value.eigenmietwert} onChange={(n) => set("eigenmietwert", n)} />
+            <Num
+              label="Ertrag qualifizierte Beteiligung, Geschäft"
+              value={value.beteiligungGeschaeft}
+              onChange={(n) => set("beteiligungGeschaeft", n)}
+            />
+            <Num
+              label="Ertrag qualifizierte Beteiligung, privat"
+              value={value.beteiligungPrivat}
+              onChange={(n) => set("beteiligungPrivat", n)}
+            />
+          </>
+        )}
+      </div>
+      {path === "quellen" && (
+        <label className="mt-3 flex min-h-11 items-center gap-2">
+          <input
+            type="checkbox"
+            checked={value.grenzgaenger}
+            onChange={(e) => onChange({ ...value, grenzgaenger: e.target.checked })}
+          />
+          Grenzgängerin oder Grenzgänger
+        </label>
+      )}
+      {path === "quellen" && value.grenzgaenger && (
+        <div className="mt-3">
+          <Num
+            label="Kaufkraftindex"
+            value={value.kaufkraft}
+            onChange={(kaufkraft) => onChange({ ...value, kaufkraft })}
+          />
+        </div>
+      )}
+    </fieldset>
+  );
+}
+
+function CurrentFields({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: IncomeInput;
+  onChange: (next: IncomeInput) => void;
+}) {
+  return (
+    <div className="mt-4">
+      <Check
+        label="Aktuelle Lage ist bekannt"
+        checked={value.aktuellBekannt}
+        onChange={(aktuellBekannt) => onChange({ ...value, aktuellBekannt })}
+      />
+      {value.aktuellBekannt && (
+        <div className="mt-3">
+          <Num label={label} value={value.aktuell} onChange={(aktuell) => onChange({ ...value, aktuell })} />
+        </div>
+      )}
+    </div>
+  );
+}

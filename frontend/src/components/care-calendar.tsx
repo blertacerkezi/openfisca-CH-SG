@@ -1,21 +1,44 @@
 
 import { useMemo, useState } from "react";
-import type { CareType, ChildInput, DayCare } from "@/lib/kibg";
+import type {
+  CareType,
+  ChildInput,
+  DayCare,
+} from "@/lib/kibg";
 
-const TYPES: Array<{ id: CareType; label: string }> = [
+const TYPES: Array<{
+  id: CareType;
+  label: string;
+}> = [
   { id: "kita", label: "Kita" },
   { id: "tagesfamilie", label: "Tagesfamilie" },
-  { id: "schulergaenzend", label: "Schulergänzend" },
+  {
+    id: "schulergaenzend",
+    label: "Schulergänzend",
+  },
 ];
+
+// Erweiterung nur für diesen Kalender.
+// kibg.ts muss nicht geändert werden.
+type StoredCare = DayCare & {
+  previousCare?: DayCare;
+};
+
+type FerienZeitraum = {
+  von: string;
+  bis: string;
+};
 
 function monthKey(year: number, month: number) {
   return `${year}-${String(month + 1).padStart(2, "0")}`;
 }
 
 function dateKey(date: Date) {
-  return `${date.getFullYear()}-${String(
-    date.getMonth() + 1,
-  ).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0"),
+  ].join("-");
 }
 
 function parseDate(value: string) {
@@ -26,10 +49,67 @@ function daysIn(year: number, month: number) {
   return new Date(year, month + 1, 0).getDate();
 }
 
-type FerienZeitraum = {
-  von: string;
-  bis: string;
-};
+function stored(
+  value: DayCare | undefined,
+): StoredCare | undefined {
+  return value as StoredCare | undefined;
+}
+
+function originalCare(
+  value: StoredCare | undefined,
+): DayCare | undefined {
+  if (!value) return undefined;
+
+  if (value.elternferien) {
+    return value.previousCare;
+  }
+
+  return {
+    hours: value.hours,
+    type: value.type,
+    obhut: value.obhut,
+  };
+}
+
+function applyHoliday(
+  value: StoredCare | undefined,
+): StoredCare {
+  return {
+    hours: 0,
+    type: value?.type ?? "kita",
+    obhut: true,
+    elternferien: true,
+
+    // Bei erneutem Eintragen der Ferien
+    // den ursprünglichen Eintrag behalten.
+    previousCare: originalCare(value),
+  };
+}
+
+function removeHoliday(
+  value: StoredCare | undefined,
+): DayCare | undefined {
+  if (!value?.elternferien) return value;
+
+  // Ursprüngliche Betreuung wiederherstellen.
+  return value.previousCare;
+}
+
+function dateRange(von: string, bis: string) {
+  const dates: string[] = [];
+
+  const end = parseDate(bis);
+
+  for (
+    const current = parseDate(von);
+    current <= end;
+    current.setDate(current.getDate() + 1)
+  ) {
+    dates.push(dateKey(current));
+  }
+
+  return dates;
+}
 
 export function CareCalendar({
   children,
@@ -47,15 +127,15 @@ export function CareCalendar({
     children[0]?.id ?? "",
   );
 
-  const [picked, setPicked] = useState<string | null>(
-    null,
-  );
+  const [picked, setPicked] = useState<
+    string | null
+  >(null);
 
   const [ferienVon, setFerienVon] = useState("");
   const [ferienBis, setFerienBis] = useState("");
 
   const child =
-    children.find((c) => c.id === active) ??
+    children.find((item) => item.id === active) ??
     children[0];
 
   const cells = useMemo(() => {
@@ -76,19 +156,18 @@ export function CareCalendar({
       () => null,
     );
 
-    const days = Array.from(
+    const dates = Array.from(
       { length: count },
-      (_, i) =>
+      (_, index) =>
         `${monthKey(cursor.year, cursor.month)}-${String(
-          i + 1,
+          index + 1,
         ).padStart(2, "0")}`,
     );
 
-    return [...blanks, ...days];
+    return [...blanks, ...dates];
   }, [cursor]);
 
-  // Elternferien aus allen Kindern auslesen.
-  // Zusammenhängende Ferientage werden als Zeitraum angezeigt.
+  // Ferien aus allen Kindern ermitteln.
   const ferienZeitraeume = useMemo(() => {
     const dates = [
       ...new Set(
@@ -129,7 +208,7 @@ export function CareCalendar({
   if (!child) return null;
 
   const draft = picked
-    ? child.days[picked]
+    ? stored(child.days[picked])
     : undefined;
 
   function patch(
@@ -144,7 +223,7 @@ export function CareCalendar({
 
         const days = { ...item.days };
 
-        if (!next) {
+        if (next === null) {
           delete days[date];
         } else {
           days[date] = next;
@@ -158,7 +237,7 @@ export function CareCalendar({
     );
   }
 
-  function elternferienEintragen() {
+  function ferienEintragen() {
     if (
       !ferienVon ||
       !ferienBis ||
@@ -167,16 +246,12 @@ export function CareCalendar({
       return;
     }
 
-    const start = parseDate(ferienVon);
-    const end = parseDate(ferienBis);
+    const dates = dateRange(
+      ferienVon,
+      ferienBis,
+    );
 
-    const tage =
-      Math.round(
-        (end.getTime() - start.getTime()) /
-          86400000,
-      ) + 1;
-
-    if (tage > 366) {
+    if (dates.length > 366) {
       alert(
         "Bitte einen Zeitraum von maximal 366 Tagen auswählen.",
       );
@@ -187,22 +262,10 @@ export function CareCalendar({
       children.map((item) => {
         const days = { ...item.days };
 
-        for (
-          const current = new Date(start);
-          current <= end;
-          current.setDate(
-            current.getDate() + 1,
-          )
-        ) {
-          const date = dateKey(current);
-
-          days[date] = {
-            obhut: true,
-            hours: 0,
-            type:
-              days[date]?.type ?? "kita",
-            elternferien: true,
-          };
+        for (const date of dates) {
+          days[date] = applyHoliday(
+            stored(days[date]),
+          );
         }
 
         return {
@@ -212,8 +275,6 @@ export function CareCalendar({
       }),
     );
 
-    // Felder leeren, damit weitere Ferien
-    // hinzugefügt werden können.
     setFerienVon("");
     setFerienBis("");
   }
@@ -222,16 +283,24 @@ export function CareCalendar({
     von: string,
     bis: string,
   ) {
+    const dates = dateRange(von, bis);
+
     onChange(
       children.map((item) => {
         const days = { ...item.days };
 
-        for (const date of Object.keys(days)) {
-          if (
-            date >= von &&
-            date <= bis &&
-            days[date]?.elternferien
-          ) {
+        for (const date of dates) {
+          const existing = stored(days[date]);
+
+          if (!existing?.elternferien) {
+            continue;
+          }
+
+          const previous = removeHoliday(existing);
+
+          if (previous) {
+            days[date] = previous;
+          } else {
             delete days[date];
           }
         }
@@ -244,31 +313,54 @@ export function CareCalendar({
     );
   }
 
+  function ferienFuerEinKindEntfernen(
+    date: string,
+  ) {
+    const previous = removeHoliday(draft);
+
+    patch(date, previous ?? null);
+  }
+
   function spread() {
     const prefix = monthKey(
       cursor.year,
       cursor.month,
     );
 
-    const pattern = new Map<
-      number,
-      DayCare
-    >();
+    const pattern = new Map<number, DayCare>();
 
-    for (const [date, care] of Object.entries(
+    // Wochenmuster aus dem angezeigten
+    // Monat lesen.
+    for (const [date, raw] of Object.entries(
       child.days,
     )) {
-      if (
-        !date.startsWith(prefix) ||
-        care.elternferien
-      ) {
+      if (!date.startsWith(prefix)) {
         continue;
       }
 
+      const care = stored(raw);
+
+      // Auch während Elternferien kann ein
+      // gespeichertes Wochenmuster existieren.
+      const sample = originalCare(care);
+
+      if (!sample) continue;
+
       pattern.set(
         parseDate(date).getDay(),
-        care,
+        {
+          hours: sample.hours,
+          type: sample.type,
+          obhut: sample.obhut,
+        },
       );
+    }
+
+    if (pattern.size === 0) {
+      alert(
+        "Bitte zuerst ein Wochenmuster im angezeigten Monat erfassen.",
+      );
+      return;
     }
 
     onChange(
@@ -292,36 +384,44 @@ export function CareCalendar({
 
           const year = start.getFullYear();
           const month = start.getMonth();
-
-          const count = daysIn(
-            year,
-            month,
-          );
+          const count = daysIn(year, month);
 
           for (
             let day = 1;
             day <= count;
             day += 1
           ) {
-            const date = `${year}-${String(
-              month + 1,
-            ).padStart(2, "0")}-${String(
-              day,
-            ).padStart(2, "0")}`;
-
-            // Bereits eingetragene Elternferien
-            // dürfen nicht überschrieben werden.
-            if (days[date]?.elternferien) {
-              continue;
-            }
+            const date = [
+              year,
+              String(month + 1).padStart(2, "0"),
+              String(day).padStart(2, "0"),
+            ].join("-");
 
             const sample = pattern.get(
               parseDate(date).getDay(),
             );
 
-            if (sample) {
+            if (!sample) continue;
+
+            const existing = stored(days[date]);
+
+            if (existing?.elternferien) {
+              // Ferien bleiben bei 0 Stunden.
+              // Neues Wochenmuster wird aber
+              // für später gespeichert.
               days[date] = {
-                ...sample,
+                ...existing,
+                previousCare: {
+                  hours: sample.hours,
+                  type: sample.type,
+                  obhut: sample.obhut,
+                },
+              };
+            } else {
+              days[date] = {
+                hours: sample.hours,
+                type: sample.type,
+                obhut: sample.obhut,
                 elternferien: false,
               };
             }
@@ -338,6 +438,7 @@ export function CareCalendar({
 
   return (
     <div className="flex flex-col gap-4">
+      {/* Kind auswählen */}
       <div className="flex flex-wrap gap-2">
         {children.map((item, index) => (
           <button
@@ -353,26 +454,26 @@ export function CareCalendar({
                 : "bg-sand text-ink"
             }`}
           >
-            {item.name ||
-              `Kind ${index + 1}`}
+            {item.name || `Kind ${index + 1}`}
           </button>
         ))}
       </div>
 
+      {/* Monat wechseln */}
       <div className="flex items-center justify-between">
         <button
           type="button"
           className="min-h-11 px-3"
           onClick={() =>
-            setCursor((c) =>
-              c.month === 0
+            setCursor((current) =>
+              current.month === 0
                 ? {
-                    year: c.year - 1,
+                    year: current.year - 1,
                     month: 11,
                   }
                 : {
-                    ...c,
-                    month: c.month - 1,
+                    ...current,
+                    month: current.month - 1,
                   },
             )
           }
@@ -395,15 +496,15 @@ export function CareCalendar({
           type="button"
           className="min-h-11 px-3"
           onClick={() =>
-            setCursor((c) =>
-              c.month === 11
+            setCursor((current) =>
+              current.month === 11
                 ? {
-                    year: c.year + 1,
+                    year: current.year + 1,
                     month: 0,
                   }
                 : {
-                    ...c,
-                    month: c.month + 1,
+                    ...current,
+                    month: current.month + 1,
                   },
             )
           }
@@ -412,6 +513,7 @@ export function CareCalendar({
         </button>
       </div>
 
+      {/* Wochentage */}
       <div className="grid grid-cols-7 gap-1 text-center text-sm text-muted">
         {[
           "Mo",
@@ -421,31 +523,26 @@ export function CareCalendar({
           "Fr",
           "Sa",
           "So",
-        ].map((d) => (
-          <span key={d}>{d}</span>
+        ].map((day) => (
+          <span key={day}>{day}</span>
         ))}
       </div>
 
+      {/* Monatskalender */}
       <div className="grid grid-cols-7 gap-1">
         {cells.map((date, index) => {
           if (!date) {
-            return (
-              <span key={`b-${index}`} />
-            );
+            return <span key={`blank-${index}`} />;
           }
 
-          const care = child.days[date];
-          const day = Number(
-            date.slice(-2),
-          );
+          const care = stored(child.days[date]);
+          const day = Number(date.slice(-2));
 
           return (
             <button
               key={date}
               type="button"
-              onClick={() =>
-                setPicked(date)
-              }
+              onClick={() => setPicked(date)}
               className={`min-h-11 rounded-md border text-sm ${
                 care?.elternferien
                   ? "border-amber-500 bg-amber-50 text-ink"
@@ -474,31 +571,51 @@ export function CareCalendar({
         })}
       </div>
 
+      {/* Einzelnen Tag bearbeiten */}
       {picked && (
         <div className="rounded-card border border-line bg-card p-4">
           <p className="font-medium">
-            {parseDate(
-              picked,
-            ).toLocaleDateString("de-CH", {
-              weekday: "long",
-              day: "numeric",
-              month: "long",
-            })}
+            {parseDate(picked).toLocaleDateString(
+              "de-CH",
+              {
+                weekday: "long",
+                day: "numeric",
+                month: "long",
+              },
+            )}
           </p>
 
           {draft?.elternferien && (
             <div className="mt-3 rounded-md bg-amber-50 p-3 text-sm text-ink">
-              Elternferien: Das Kind wird
-              zu Hause betreut.
+              <p>
+                Elternferien: Das Kind wird zu
+                Hause betreut.
+              </p>
+
+              {draft.previousCare && (
+                <p className="mt-1">
+                  Gespeicherte Betreuung:{" "}
+                  {draft.previousCare.hours} Stunden
+                  {" · "}
+                  {TYPES.find(
+                    (type) =>
+                      type.id ===
+                      draft.previousCare?.type,
+                  )?.label ??
+                    draft.previousCare.type}
+                </p>
+              )}
 
               <button
                 type="button"
-                className="ml-2 underline"
+                className="mt-2 underline"
                 onClick={() =>
-                  patch(picked, null)
+                  ferienFuerEinKindEntfernen(
+                    picked,
+                  )
                 }
               >
-                Für dieses Kind entfernen
+                Ferien für dieses Kind entfernen
               </button>
             </div>
           )}
@@ -506,17 +623,12 @@ export function CareCalendar({
           <label className="mt-3 flex min-h-11 items-center gap-2">
             <input
               type="checkbox"
-              checked={
-                draft?.obhut ?? false
-              }
-              onChange={(e) =>
+              checked={draft?.obhut ?? false}
+              onChange={(event) =>
                 patch(picked, {
-                  obhut:
-                    e.target.checked,
-                  hours:
-                    draft?.hours ?? 0,
-                  type:
-                    draft?.type ?? "kita",
+                  obhut: event.target.checked,
+                  hours: draft?.hours ?? 0,
+                  type: draft?.type ?? "kita",
                   elternferien: false,
                 })
               }
@@ -529,17 +641,12 @@ export function CareCalendar({
 
             <select
               className="mt-1 min-h-11 w-full rounded-card border border-line bg-card px-3"
-              value={
-                draft?.type ?? "kita"
-              }
-              onChange={(e) =>
+              value={draft?.type ?? "kita"}
+              onChange={(event) =>
                 patch(picked, {
-                  obhut:
-                    draft?.obhut ?? true,
-                  hours:
-                    draft?.hours ?? 0,
-                  type:
-                    e.target.value as CareType,
+                  obhut: draft?.obhut ?? true,
+                  hours: draft?.hours ?? 0,
+                  type: event.target.value as CareType,
                   elternferien: false,
                 })
               }
@@ -563,25 +670,21 @@ export function CareCalendar({
               min={0}
               max={12}
               step={0.5}
-              value={
-                draft?.hours ?? 0
-              }
-              onFocus={(e) => {
+              value={draft?.hours ?? 0}
+              onFocus={(event) => {
                 if (
-                  e.currentTarget.value ===
+                  event.currentTarget.value ===
                   "0"
                 ) {
-                  e.currentTarget.select();
+                  event.currentTarget.select();
                 }
               }}
-              onChange={(e) =>
+              onChange={(event) =>
                 patch(picked, {
-                  obhut:
-                    draft?.obhut ?? true,
-                  type:
-                    draft?.type ?? "kita",
+                  obhut: draft?.obhut ?? true,
+                  type: draft?.type ?? "kita",
                   hours: Number(
-                    e.target.value,
+                    event.target.value,
                   ),
                   elternferien: false,
                 })
@@ -592,21 +695,21 @@ export function CareCalendar({
         </div>
       )}
 
-      {/* Elternferien: beliebig viele Zeiträume */}
+      {/* Elternferien */}
       <div className="rounded-card border border-line bg-card p-4">
         <h3 className="font-medium">
-          Ferien der Eltern – mehrere Zeiträume möglich
+          Ferien der Eltern – mehrere Zeiträume
+          möglich
         </h3>
 
         <p className="mt-2 text-sm text-muted">
-          Du kannst mehrere Ferienzeiträume
-          eintragen, zum Beispiel eine Woche
-          im Frühling und zwei Wochen im
-          Sommer. Die Ferien gelten
-          automatisch für alle Kinder.
-          Wenn die Kinder zu Hause betreut
-          werden, werden die externen
-          Betreuungsstunden auf 0 gesetzt.
+          Elternferien gelten automatisch für
+          alle Kinder. Während der Ferien
+          zählen 0 externe Betreuungsstunden.
+          Die vorherige Kita- oder
+          Tagesfamilienbetreuung bleibt
+          gespeichert und wird beim Entfernen
+          der Ferien wiederhergestellt.
         </p>
 
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
@@ -616,9 +719,9 @@ export function CareCalendar({
             <input
               type="date"
               value={ferienVon}
-              onChange={(e) =>
+              onChange={(event) =>
                 setFerienVon(
-                  e.target.value,
+                  event.target.value,
                 )
               }
               className="mt-1 min-h-11 w-full rounded-card border border-line bg-card px-3"
@@ -631,12 +734,10 @@ export function CareCalendar({
             <input
               type="date"
               value={ferienBis}
-              min={
-                ferienVon || undefined
-              }
-              onChange={(e) =>
+              min={ferienVon || undefined}
+              onChange={(event) =>
                 setFerienBis(
-                  e.target.value,
+                  event.target.value,
                 )
               }
               className="mt-1 min-h-11 w-full rounded-card border border-line bg-card px-3"
@@ -646,9 +747,7 @@ export function CareCalendar({
 
         <button
           type="button"
-          onClick={
-            elternferienEintragen
-          }
+          onClick={ferienEintragen}
           disabled={
             !ferienVon ||
             !ferienBis ||
@@ -667,8 +766,7 @@ export function CareCalendar({
 
           {ferienZeitraeume.length === 0 ? (
             <p className="mt-2 text-sm text-muted">
-              Noch keine Elternferien
-              eingetragen.
+              Noch keine Elternferien eingetragen.
             </p>
           ) : (
             <ul className="mt-2 space-y-2">
@@ -705,12 +803,14 @@ export function CareCalendar({
         </div>
       </div>
 
+      {/* Wochenmuster */}
       <button
         type="button"
         onClick={spread}
         className="min-h-11 self-start rounded-card bg-sand px-4"
       >
-        Dieses Wochenmuster auf zwölf Monate übertragen
+        Dieses Wochenmuster auf zwölf Monate
+        übertragen
       </button>
     </div>
   );
